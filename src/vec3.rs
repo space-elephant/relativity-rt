@@ -1,4 +1,5 @@
 use std::ops::*;
+use rand::Rng;
 
 #[derive(Clone, Copy, Debug)]
 pub struct Vec3 {
@@ -14,6 +15,10 @@ impl Default for Vec3 {
 }
 
 impl Vec3 {
+    pub fn grey(value: f64) -> Self {
+	Colour3::new(value, value, value)
+    }
+    
     pub fn new(x: f64, y: f64, z: f64) -> Self {
 	Vec3 {x, y, z}
     }
@@ -40,6 +45,79 @@ impl Vec3 {
 	    self.z*other.x - self.x*other.z,
 	    self.x*other.y - self.y*other.x,
 	)
+    }
+
+    pub fn hadamard(self, other: Self) -> Self {
+	Vec3::new(
+	    self.x * other.x,
+	    self.y * other.y,
+	    self.z * other.z,
+	)
+    }
+
+    // reflect incidant ray direction about unit normal
+    pub fn reflect(self, normal: Self) -> Self {
+	self - 2.0 * self.dot(normal) * normal
+    }
+
+    // unlike reflect, takes normalized vector
+    pub fn refract(self, normal: Self, rel_refractive_index: f64) -> Option<Self> {
+	let cos = (-self.dot(normal)).min(1.0);
+	let sinsq = 1.0 - cos*cos;
+	if rel_refractive_index*rel_refractive_index * sinsq > 1.0 {
+	    return None;
+	}
+	
+	let perpendicular = rel_refractive_index * (self + cos * normal);
+	// absolute value to protect against error causing slightly negative
+	let parallel = -(1.0 - perpendicular.length_squared()).abs().sqrt() * normal;
+	Some(perpendicular + parallel)
+    }
+
+    pub fn random() -> Self {
+	let mut rng = rand::thread_rng();
+	Vec3::new(rng.gen(), rng.gen(), rng.gen())
+    }
+
+    pub fn random_unit() -> Self {
+	loop {
+	    let vector = Self::random();
+	    if vector.length_squared() <= 1.0 && vector.length_squared() > 1e-160 {
+		return vector.normalized();
+	    }
+	}
+    }
+
+    pub fn random_on_hemisphere(normal: Vec3) -> Self {
+	let result = Self::random_unit();
+	if result.dot(normal) < 0.0 {
+	    -result
+	} else {
+	    result
+	}
+    }
+
+    pub fn add_gamma(self) -> Self {
+	Colour3::new(
+	    linear_add_gamma(self.x),
+	    linear_add_gamma(self.y),
+	    linear_add_gamma(self.z),
+	)
+    }
+
+    pub fn near_zero(self) -> bool {
+	const S: f64 = 1e-8;
+	self.x.abs() < S && self.y.abs() < S && self.z.abs() < S
+    }
+}
+
+// add gamma for one channel, which is 1/2 in this case
+fn linear_add_gamma(value: f64) -> f64 {
+    if value < 0.0 {
+	// clamp
+	0.0
+    } else {
+	value.sqrt()
     }
 }
 

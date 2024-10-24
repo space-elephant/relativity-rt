@@ -84,8 +84,9 @@ impl Camera {
 	let max_depth = 32;
 	let vfov = 36.87_f64.to_radians() * 2.0;
 
-	let position: Point3 = Point3::default();
-	let direction: Vec3 = Vec3::new(0.0, 0.0, -1.0);
+	let position = Point3::new(0.0, 0.0, 0.0);
+	let target = Point3::new(0.0, 0.0, -1.0);
+	let direction = target - position;
 	
 	Camera {
 	    image_width,
@@ -105,12 +106,14 @@ impl Camera {
 
 	let vup = Vec3::new(0.0, 1.0, 0.0);
 	let w = self.direction / focal_length;
-	let u = vup.cross(w);
+	let u = vup.cross(w).normalized();
 	let v = w.cross(u);
 
-	let viewport_u = u / self.image_width as f64;
-	let viewport_v = v / self.image_width as f64;
+	let viewport_u = u * viewport_width;
+	let viewport_v = -v * viewport_height;
 	let viewport_upper_left = -self.direction - (viewport_u + viewport_v) / 2.0;
+	//println!("{viewport_upper_left:?}");
+	//panic!();
 	
 	Image(Array2::from_shape_fn((self.image_height, self.image_width), |(j, i)| {
 	    if i == 0 {
