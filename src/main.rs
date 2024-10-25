@@ -80,13 +80,13 @@ impl Camera {
 	let aspect_ratio: f64 = 16.0 / 9.0;
 	let image_width = 640;
 	let image_height = ((image_width as f64 / aspect_ratio) as usize).max(1);
-	let samples_per_pixel = 4;//64;
+	let samples_per_pixel = 64;
 	let max_depth = 32;
 	let vfov = 36.87_f64.to_radians() * 2.0;
 
-	let position = Point3::new(0.0, 0.0, 0.0);
+	let position = Point3::new(-0.5, 1.0, 0.5);
 	let target = Point3::new(0.0, 0.0, -1.0);
-	let direction = target - position;
+	let direction = position - target;
 	
 	Camera {
 	    image_width,
@@ -98,6 +98,7 @@ impl Camera {
 	    vfov,
 	}
     }
+    
     fn render(&self, world: &dyn Object) -> Image {
 	let focal_length: f64 = self.direction.length();
 	let h = (self.vfov / 2.0).tan();
@@ -106,14 +107,16 @@ impl Camera {
 
 	let vup = Vec3::new(0.0, 1.0, 0.0);
 	let w = self.direction / focal_length;
+	
 	let u = vup.cross(w).normalized();
 	let v = w.cross(u);
 
 	let viewport_u = u * viewport_width;
 	let viewport_v = -v * viewport_height;
 	let viewport_upper_left = -self.direction - (viewport_u + viewport_v) / 2.0;
-	//println!("{viewport_upper_left:?}");
-	//panic!();
+
+	let inverse_width = 1.0 / self.image_width as f64;
+	let inverse_height = 1.0 / self.image_height as f64;
 	
 	Image(Array2::from_shape_fn((self.image_height, self.image_width), |(j, i)| {
 	    if i == 0 {
@@ -123,7 +126,7 @@ impl Camera {
 
 	    let mut total = Colour3::default();
 	    for _ in 0..self.samples_per_pixel {
-		let pixel_direction = viewport_upper_left + (i as f64 + rng.gen::<f64>()) * u + (j as f64 + rng.gen::<f64>()) * v;
+		let pixel_direction = viewport_upper_left + (i as f64 + rng.gen::<f64>()) * inverse_width * viewport_u + (j as f64 + rng.gen::<f64>()) * inverse_height * viewport_v;
 		let ray = Ray::new(self.position, pixel_direction);
 		total += ray_colour(ray, &*world, self.max_depth);
 	    }
