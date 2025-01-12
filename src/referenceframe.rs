@@ -1,9 +1,9 @@
 use crate::vec3::*;
 use crate::objects::*;
 use crate::boundingbox::*;
-use crate::Ray::*;
+use crate::ray::*;
 
-use std::mem::{align_of, size_of, transmute};
+use std::mem::{align_of, size_of, transmute, MaybeUninit};
 
 fn choose_axis(objects: &[Primitive]) -> Axis {
     let mut range = Boundingbox::default();
@@ -37,6 +37,7 @@ fn choose_center(objects: &[Primitive], axis: Axis) -> f64 {
     return (min + max) * 0.5;
 }
 
+// consists of at least one primitive
 pub enum BvhBuilder {
     Primitive(Box<Primitive>),
     Split{
@@ -49,9 +50,10 @@ pub enum BvhBuilder {
 
 impl BvhBuilder {
     pub fn new(objects: Vec<Primitive>) -> BvhBuilder {
+	assert_ne!(objects.len(), 0);
 	match TryInto::<[_; 1]>::try_into(objects) {
 	    Ok([object]) => {
-		BvhBuilder::Primitive(Box::new(object)),
+		BvhBuilder::Primitive(Box::new(object))
 	    },
 	    Err(objects) => {
 		let axis = choose_axis(&objects);
@@ -71,12 +73,19 @@ impl BvhBuilder {
 		let right = BvhBuilder::new(right_objects);
 
 		BvhBuilder::Split {
-		    bbox: left.bbox + right.bbox,
+		    bbox: left.boundingbox() + right.boundingbox(),
 		    axis,
 		    left: Box::new(left),
 		    right: Box::new(right),
 		}
 	    }
+	}
+    }
+
+    fn boundingbox(&self) -> Boundingbox {
+	match self {
+	    BvhBuilder::Primitive(object) => object.boundingbox(),
+	    BvhBuilder::Split{bbox, ..} => *bbox,
 	}
     }
 
@@ -92,7 +101,7 @@ impl BvhBuilder {
 	match self {
 	    BvhBuilder::Primitive(object) => {
 		unsafe {
-		    block[0].write(BvhNode::Primitive(object));
+		    block[0].write(BvhNode::Primitive(*object));
 		}
 		1
 	    },
@@ -100,38 +109,73 @@ impl BvhBuilder {
 		let (target, block) = block.split_at_mut(1);
 		
 		let split = left.into_copy_sequence(block);
-		let end = left.into_copy_sequence(&mut block[split..]) + split;
+		let end = right.into_copy_sequence(&mut block[split..]) + split;
 		unsafe {
+		    // rightchild is now fully initialized by the second call
 		    let rightchild = &block[split..end];
 		    block[0].write(
 			BvhNode::BvhBranch(
 			    BvhBranch {
 				bbox,
 				axis,
-				rightchild,
+				rightchild: transmute::<&[MaybeUninit<BvhNode>], *const [BvhNode]>
+				    (rightchild),
 			    }
 			)
 		    );
 		}
-		end
+		end + 1
 	    },
 	}
     }
 
     fn into_serialize(self) -> Bvh {
-	todo!()
+	let mut target: Box<[MaybeUninit<BvhNode>]> =
+	    std::iter::repeat_with(MaybeUninit::uninit)
+            .take(self.sequential_length())
+            .collect();
+	unsafe {
+	    self.into_copy_sequence(&mut *target);
+	    Bvh(
+		transmute::<Box<[MaybeUninit<BvhNode>]>, Box<[BvhNode]>>(target),
+		std::marker::PhantomPinned
+	    )
+	}
     }
 }
 
 pub struct Bvh(Box<[BvhNode]>, std::marker::PhantomPinned);
+
+impl Object for Bvh {
+    fn hit(&self, ray: Ray, range: Range) -> Option<HitRecord> {
+	BvhNode::hit((&*self.0) as *const [BvhNode], ray, range)
+    }
+    fn boundingbox(&self) -> Boundingbox {
+	self.0[0].boundingbox()
+    }
+}
 
 enum BvhNode {
     Primitive(Primitive),
     BvhBranch(BvhBranch),
 }
 
+impl BvhNode {
+    fn boundingbox(&self) -> Boundingbox {
+	match self {
+	    BvhNode::Primitive(object) => object.boundingbox(),
+	    BvhNode::BvhBranch(branch) => branch.bbox,
+	}
+    }
+    
+    fn hit(bvh: *const[Self], ray: Ray, range: Range) -> Option<HitRecord> {
+	todo!()
+    }
+}
+
+// rightchild points back into the Bvh, somewhere upwards of self
 struct BvhBranch {
     bbox: Boundingbox,
-    rightchild: const* [BvhNode],
+    rightchild: *const [BvhNode],
     axis: Axis,
 }
