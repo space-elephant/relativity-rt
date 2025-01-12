@@ -89,3 +89,23 @@ impl Material for Dielectric {
 	Some((Colour3::grey(1.0), Ray::new(record.point, direction)))
     }
 }
+
+#[derive(Debug)]
+pub struct Isotropic {
+    albedo: Colour3,
+}
+
+impl Isotropic {
+    pub fn new(albedo: Colour3) -> Self {
+	Isotropic {
+	    albedo,
+	}
+    }
+}
+
+impl Material for Isotropic {
+    fn reflect(&self, record: &HitRecord) -> Option<(Colour3, Ray)> {
+	let direction = Vec3::random_unit();
+	Some((self.albedo, Ray::new(record.point, direction)))
+    }
+}

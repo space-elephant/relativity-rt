@@ -2,6 +2,13 @@ use std::ops::*;
 use rand::Rng;
 
 #[derive(Clone, Copy, Debug)]
+pub enum Axis {
+    X,
+    Y,
+    Z,
+}
+
+#[derive(Clone, Copy, Debug)]
 pub struct Vec3 {
     pub x: f64,
     pub y: f64,
@@ -190,6 +197,28 @@ impl Div<f64> for Vec3 {
 impl DivAssign<f64> for Vec3 {
     fn div_assign(&mut self, other: f64) {
 	*self = *self / other;
+    }
+}
+
+impl Index<Axis> for Vec3 {
+    type Output = f64;
+
+    fn index(&self, index: Axis) -> &f64 {
+	match index {
+	    Axis::X => &self.x,
+	    Axis::Y => &self.y,
+	    Axis::Z => &self.z,
+	}
+    }
+}
+
+impl IndexMut<Axis> for Vec3 {
+    fn index_mut(&mut self, index: Axis) -> &mut f64 {
+	match index {
+	    Axis::X => &mut self.x,
+	    Axis::Y => &mut self.y,
+	    Axis::Z => &mut self.z,
+	}
     }
 }
 

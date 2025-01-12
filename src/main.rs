@@ -20,6 +20,12 @@ use objects::*;
 mod material;
 use material::*;
 
+mod boundingbox;
+use boundingbox::*;
+
+mod referenceframe;
+use referenceframe::*;
+
 const XAXIS: Axis = Axis(1);
 const YAXIS: Axis = Axis(0);
 
@@ -137,9 +143,9 @@ impl Camera {
 
 fn main() {
     let world = Box::new(Group::new(vec![
-	Box::new(Sphere::new(Rc::new(Lambertian::new(Colour3::new(0.1, 0.2, 0.5))), Point3::new(1.0, 0.0, -1.0), 0.5)),
+	Box::new(SmokeSphere::new(Colour3::new(0.1, 0.1, 0.1), 1.0, Point3::new(-1.0, 0.0, -1.0), 0.5)),
 	Box::new(Sphere::new(Rc::new(Lambertian::new(Colour3::new(0.1, 0.5, 0.1))), Point3::new(0.0, 0.0, -2.0), 0.2)),
-	Box::new(Sphere::new(Rc::new(Metal::new(Colour3::new(0.73, 0.45, 0.2), 0.05)), Point3::new(-1.0, 0.0, -1.0), 0.5)),
+	Box::new(Sphere::new(Rc::new(Metal::new(Colour3::new(0.73, 0.45, 0.2), 0.05)), Point3::new(1.0, 0.0, -1.0), 0.5)),
 	Box::new(Sphere::new(Rc::new(Dielectric::new(1.5)), Point3::new(0.0, 0.0, -1.0), 0.5)),
 	Box::new(Sphere::new(Rc::new(Dielectric::new(1.0 / 1.5)), Point3::new(0.0, 0.0, -1.0), 0.45)),
 	Box::new(Sphere::new(Rc::new(Lambertian::new(Colour3::new(0.5, 0.5, 0.5))), Point3::new(0.0, -100.5, -1.0), 100.0)),
