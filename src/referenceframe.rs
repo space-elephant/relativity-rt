@@ -148,7 +148,7 @@ pub struct Bvh(Box<[BvhNode]>, std::marker::PhantomPinned);
 
 impl Object for Bvh {
     fn hit(&self, ray: Ray, range: Range) -> Option<HitRecord> {
-	BvhNode::hit((&*self.0) as *const [BvhNode], ray, range)
+	BvhNode::hit(&*self.0, ray, range)
     }
     fn boundingbox(&self) -> Boundingbox {
 	self.0[0].boundingbox()
@@ -163,13 +163,43 @@ enum BvhNode {
 impl BvhNode {
     fn boundingbox(&self) -> Boundingbox {
 	match self {
-	    BvhNode::Primitive(object) => object.boundingbox(),
-	    BvhNode::BvhBranch(branch) => branch.bbox,
+	    Self::Primitive(object) => object.boundingbox(),
+	    Self::BvhBranch(branch) => branch.bbox,
 	}
     }
     
-    fn hit(bvh: *const[Self], ray: Ray, range: Range) -> Option<HitRecord> {
-	todo!()
+    fn hit<'a>(bvh: &'a [Self], ray: Ray, mut range: Range) -> Option<HitRecord> {
+	match &bvh[0] {
+	    Self::Primitive(object) => object.hit(ray, range),
+	    Self::BvhBranch(branch) => {
+		let inrange = branch.bbox.intersect_ray(ray);
+		if inrange.is_empty() {
+		    return None;
+		}
+
+		let rightchild = unsafe {
+		    transmute::<*const [BvhNode], &'a [BvhNode]>(branch.rightchild)
+		};
+
+		if ray.direction[branch.axis] > 0.0 {// left child, with lower values, first
+		    match Self::hit(&bvh[1..], ray, range.clone()) {
+			Some(rec) => {
+			    range.end = rec.t;
+			    Self::hit(rightchild, ray, range).or(Some(rec))
+			},
+			None => Self::hit(rightchild, ray, range),
+		    }
+		} else {
+		    match Self::hit(rightchild, ray, range.clone()) {
+			Some(rec) => {
+			    range.end = rec.t;
+			    Self::hit(&bvh[1..], ray, range).or(Some(rec))
+			},
+			None => Self::hit(&bvh[1..], ray, range),
+		    }
+		}
+	    },
+	}
     }
 }
 
