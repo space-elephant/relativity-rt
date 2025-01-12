@@ -1,3 +1,5 @@
+#[deny(unsafe_op_in_unsafe_fn)]
+
 use ndarray::{Array2, Axis};
 use std::path::Path;
 use std::fs::File;

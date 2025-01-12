@@ -37,28 +37,21 @@ fn choose_center(objects: &[Primitive], axis: Axis) -> f64 {
     return (min + max) * 0.5;
 }
 
-enum BvhBuilderChildren {
+pub enum BvhBuilder {
     Primitive(Box<Primitive>),
     Split{
+	bbox: Boundingbox,
 	axis: Axis,
 	left: Box<BvhBuilder>,
 	right: Box<BvhBuilder>,
     },
 }
 
-pub struct BvhBuilder {
-    bbox: Boundingbox,
-    children: BvhBuilderChildren,
-}
-
 impl BvhBuilder {
-    fn new(objects: Vec<Primitive>) -> BvhBuilder {
+    pub fn new(objects: Vec<Primitive>) -> BvhBuilder {
 	match TryInto::<[_; 1]>::try_into(objects) {
 	    Ok([object]) => {
-		BvhBuilder {
-		    bbox: object.boundingbox(),
-		    children: BvhBuilderChildren::Primitive(Box::new(object)),
-		}
+		BvhBuilder::Primitive(Box::new(object)),
 	    },
 	    Err(objects) => {
 		let axis = choose_axis(&objects);
@@ -77,74 +70,68 @@ impl BvhBuilder {
 		let left = BvhBuilder::new(left_objects);
 		let right = BvhBuilder::new(right_objects);
 
-		BvhBuilder {
+		BvhBuilder::Split {
 		    bbox: left.bbox + right.bbox,
-		    children: BvhBuilderChildren::Split {
-			axis,
-			left: Box::new(left),
-			right: Box::new(right),
-		    },
+		    axis,
+		    left: Box::new(left),
+		    right: Box::new(right),
 		}
 	    }
 	}
     }
-}
 
-enum BvhRef<'a> {
-    Primitive(&'a Primitive),
-    BvhBranch(&'a BvhBranch),
-}
-
-const OFFSET_PRIMITIVE: usize = size_of::<Primitive>() + align_of::<Primitive>();
-const OFFSET_BRANCH: usize = size_of::<BvhBranch>() + align_of::<BvhBranch>();
-
-// my reference points to bool. If true, succeeded (after alignment) by Primitive; otherwise BvhBranch
-// is considered to own everything after itself
-pub struct Bvh(bool, std::marker::PhantomPinned);
-
-impl Bvh {
-    fn collect<'a> (&'a self) -> BvhRef<'a> {
-	unsafe {
-	    // required for the construction of this object
-	    // add moves by bytes
-	    if self.0 {
-		BvhRef::Primitive(
-		    transmute::<*const Bvh, &'a Primitive> (
-			(self as *const Bvh)
-			    .add(align_of::<Primitive>())
-		    )
-		)
-	    } else {
-		BvhRef::BvhBranch(
-		    transmute::<*const Bvh, &'a BvhBranch> (
-			(self as *const Bvh)
-			    .add(align_of::<BvhBranch>())
-		    )
-		)
-	    }
+    fn sequential_length(&self) -> usize {
+	match self {
+	    BvhBuilder::Primitive(primitive) => 1,
+	    BvhBuilder::Split{left, right, ..} => 1 + left.sequential_length() + right.sequential_length(),
 	}
     }
-}
 
-impl Object for Bvh {
-    fn hit(&self, ray: Ray, range: Range) -> Option<HitRecord> {
-	todo!();
-    }
-
-    fn boundingbox(&self) -> Boundingbox {
-	match self.collect() {
-	    BvhRef::Primitive(primitive) {
-		primitive.boundingbox()
+    // returns the distance into the block that was written to
+    unsafe fn into_copy_sequence(self, block: &mut [MaybeUninit<BvhNode>]) -> usize {
+	match self {
+	    BvhBuilder::Primitive(object) => {
+		unsafe {
+		    block[0].write(BvhNode::Primitive(object));
+		}
+		1
 	    },
-	    BvhRef::BvhBranch(branch) {
-		branch.bbox
-	    }
+	    BvhBuilder::Split{bbox, axis, left, right} => {
+		let (target, block) = block.split_at_mut(1);
+		
+		let split = left.into_copy_sequence(block);
+		let end = left.into_copy_sequence(&mut block[split..]) + split;
+		unsafe {
+		    let rightchild = &block[split..end];
+		    block[0].write(
+			BvhNode::BvhBranch(
+			    BvhBranch {
+				bbox,
+				axis,
+				rightchild,
+			    }
+			)
+		    );
+		}
+		end
+	    },
 	}
     }
+
+    fn into_serialize(self) -> Bvh {
+	todo!()
+    }
+}
+
+pub struct Bvh(Box<[BvhNode]>, std::marker::PhantomPinned);
+
+enum BvhNode {
+    Primitive(Primitive),
+    BvhBranch(BvhBranch),
 }
 
 struct BvhBranch {
     bbox: Boundingbox,
-    rightchild: *const Bvh,
+    rightchild: const* [BvhNode],
     axis: Axis,
 }
