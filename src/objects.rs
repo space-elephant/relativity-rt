@@ -48,12 +48,14 @@ pub trait Object {
     fn boundingbox(&self) -> Boundingbox;
 }
 
+#[derive(Debug)]
 #[enum_dispatch(Object)]
 pub enum Primitive {
     Sphere(Sphere),
     SmokeSphere(SmokeSphere),
 }
 
+#[derive(Debug)]
 pub struct Sphere {
     center: Point3,
     radius: f64,
@@ -116,12 +118,13 @@ impl Object for Sphere {
     }
 }
 
+#[derive(Debug)]
 pub struct Group {
-    objects: Vec<Box<dyn Object>>,
+    objects: Vec<Primitive>,
 }
 
 impl Group {
-    pub fn new(objects: Vec<Box<dyn Object>>) -> Self {
+    pub fn new(objects: Vec<Primitive>) -> Self {
 	Group {
 	    objects,
 	}
@@ -149,6 +152,7 @@ impl Object for Group {
     }
 }
 
+#[derive(Debug)]
 pub struct SmokeSphere {
     center: Point3,
     radius: f64,
@@ -210,5 +214,4 @@ impl Object for SmokeSphere {
 	let shift = Vec3::new(self.radius, self.radius, self.radius);
 	Boundingbox::new(self.center - shift, self.center + shift)
     }
-
 }

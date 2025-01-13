@@ -51,7 +51,7 @@ impl Image {
     }
 }
 
-fn ray_colour(ray: Ray, world: &dyn Object, depth: u32) -> Colour3 {
+fn ray_colour(ray: Ray, world: &Bvh, depth: u32) -> Colour3 {
     if depth == 0 {
 	return Colour3::default();
     }
@@ -107,7 +107,7 @@ impl Camera {
 	}
     }
     
-    fn render(&self, world: &dyn Object) -> Image {
+    fn render(&self, world: Bvh) -> Image {
 	let focal_length: f64 = self.direction.length();
 	let h = (self.vfov / 2.0).tan();
 	let viewport_height: f64 = 2.0 * h * focal_length;
@@ -136,7 +136,7 @@ impl Camera {
 	    for _ in 0..self.samples_per_pixel {
 		let pixel_direction = viewport_upper_left + (i as f64 + rng.gen::<f64>()) * inverse_width * viewport_u + (j as f64 + rng.gen::<f64>()) * inverse_height * viewport_v;
 		let ray = Ray::new(self.position, pixel_direction);
-		total += ray_colour(ray, &*world, self.max_depth);
+		total += ray_colour(ray, &world, self.max_depth);
 	    }
 	    total / self.samples_per_pixel as f64
 	}))
@@ -144,15 +144,17 @@ impl Camera {
 }
 
 fn main() {
-    let world = Box::new(Group::new(vec![
-	Box::new(SmokeSphere::new(Colour3::new(0.1, 0.1, 0.1), 1.0, Point3::new(-1.0, 0.0, -1.0), 0.5)),
-	Box::new(Sphere::new(Rc::new(Lambertian::new(Colour3::new(0.1, 0.5, 0.1))), Point3::new(0.0, 0.0, -2.0), 0.2)),
-	Box::new(Sphere::new(Rc::new(Metal::new(Colour3::new(0.73, 0.45, 0.2), 0.05)), Point3::new(1.0, 0.0, -1.0), 0.5)),
-	Box::new(Sphere::new(Rc::new(Dielectric::new(1.5)), Point3::new(0.0, 0.0, -1.0), 0.5)),
-	Box::new(Sphere::new(Rc::new(Dielectric::new(1.0 / 1.5)), Point3::new(0.0, 0.0, -1.0), 0.45)),
-	Box::new(Sphere::new(Rc::new(Lambertian::new(Colour3::new(0.5, 0.5, 0.5))), Point3::new(0.0, -100.5, -1.0), 100.0)),
-    ]));
+    let elements = vec![
+	Primitive::from(SmokeSphere::new(Colour3::new(0.1, 0.1, 0.1), 1.0, Point3::new(-1.0, 0.0, -1.0), 0.5)),
+	Primitive::from(Sphere::new(Rc::new(Lambertian::new(Colour3::new(0.1, 0.5, 0.1))), Point3::new(0.0, 0.0, -2.0), 0.2)),
+	Primitive::from(Sphere::new(Rc::new(Metal::new(Colour3::new(0.73, 0.45, 0.2), 0.05)), Point3::new(1.0, 0.0, -1.0), 0.5)),
+	Primitive::from(Sphere::new(Rc::new(Dielectric::new(1.5)), Point3::new(0.0, 0.0, -1.0), 0.5)),
+	Primitive::from(Sphere::new(Rc::new(Dielectric::new(1.0 / 1.5)), Point3::new(0.0, 0.0, -1.0), 0.45)),
+	Primitive::from(Sphere::new(Rc::new(Lambertian::new(Colour3::new(0.5, 0.5, 0.5))), Point3::new(0.0, -100.5, -1.0), 100.0)),
+    ];
+    //let world = Box::new(Group::new());
+    let world = Bvh::new(elements);
     let camera = Camera::new();
-    let image = camera.render(&*world);
+    let image = camera.render(world);
     image.display(Path::new("output.ppm"));
 }

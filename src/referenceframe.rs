@@ -2,6 +2,7 @@ use crate::vec3::*;
 use crate::objects::*;
 use crate::boundingbox::*;
 use crate::ray::*;
+use std::cmp::Ordering;
 
 use std::mem::{align_of, size_of, transmute, MaybeUninit};
 
@@ -38,6 +39,7 @@ fn choose_center(objects: &[Primitive], axis: Axis) -> f64 {
 }
 
 // consists of at least one primitive
+#[derive(Debug)]
 pub enum BvhBuilder {
     Primitive(Box<Primitive>),
     Split{
@@ -50,7 +52,7 @@ pub enum BvhBuilder {
 
 impl BvhBuilder {
     pub fn new(objects: Vec<Primitive>) -> BvhBuilder {
-	assert_ne!(objects.len(), 0);
+	assert!(objects.len() != 0);
 	match TryInto::<[_; 1]>::try_into(objects) {
 	    Ok([object]) => {
 		BvhBuilder::Primitive(Box::new(object))
@@ -62,13 +64,17 @@ impl BvhBuilder {
 		let mut left_objects = Vec::with_capacity(objects.len());
 		let mut right_objects = Vec::with_capacity(objects.len());
 		for object in objects {
-		    if object.boundingbox().centeroid()[axis] < center {
-			left_objects.push(object);
-		    } else {
-			right_objects.push(object);
+		    match object.boundingbox().centeroid()[axis].partial_cmp(&center) {
+			Some(Ordering::Less) => left_objects.push(object),
+			Some(Ordering::Greater) => right_objects.push(object),
+			_ => if left_objects.len() <= right_objects.len() {
+			    left_objects.push(object);
+			} else {
+			    right_objects.push(object);
+			}
 		    }
 		}
-
+		
 		let left = BvhBuilder::new(left_objects);
 		let right = BvhBuilder::new(right_objects);
 
@@ -106,14 +112,14 @@ impl BvhBuilder {
 		1
 	    },
 	    BvhBuilder::Split{bbox, axis, left, right} => {
-		let (target, block) = block.split_at_mut(1);
+		let (target, rest) = block.split_at_mut(1);
 		
-		let split = left.into_copy_sequence(block);
-		let end = right.into_copy_sequence(&mut block[split..]) + split;
+		let split = left.into_copy_sequence(rest);
+		let end = right.into_copy_sequence(&mut rest[split..]) + split;
 		unsafe {
 		    // rightchild is now fully initialized by the second call
-		    let rightchild = &block[split..end];
-		    block[0].write(
+		    let rightchild = &rest[split..end];
+		    target[0].write(
 			BvhNode::BvhBranch(
 			    BvhBranch {
 				bbox,
@@ -150,11 +156,23 @@ impl Object for Bvh {
     fn hit(&self, ray: Ray, range: Range) -> Option<HitRecord> {
 	BvhNode::hit(&*self.0, ray, range)
     }
+    
     fn boundingbox(&self) -> Boundingbox {
 	self.0[0].boundingbox()
     }
 }
 
+impl Bvh {
+    pub fn new(objects: Vec<Primitive>) -> Bvh {
+	BvhBuilder::new(objects).into_serialize()
+    }
+
+    pub fn display(&self) {
+	BvhNode::display(&self.0);
+    }
+}
+
+#[derive(Debug)]
 enum BvhNode {
     Primitive(Primitive),
     BvhBranch(BvhBranch),
@@ -165,6 +183,22 @@ impl BvhNode {
 	match self {
 	    Self::Primitive(object) => object.boundingbox(),
 	    Self::BvhBranch(branch) => branch.bbox,
+	}
+    }
+
+    fn display<'a>(bvh: &'a [Self]) {
+	match &bvh[0] {
+	    Self::Primitive(object) => println!("primitive"),
+	    Self::BvhBranch(branch) => {
+		println!("branch: ");
+		Self::display(&bvh[1..]);
+		println!(", ");
+		let rightchild = unsafe {
+		    transmute::<*const [BvhNode], &'a [BvhNode]>(branch.rightchild)
+		};
+		Self::display(rightchild);
+		println!("end");
+	    },
 	}
     }
     
@@ -204,6 +238,7 @@ impl BvhNode {
 }
 
 // rightchild points back into the Bvh, somewhere upwards of self
+#[derive(Debug)]
 struct BvhBranch {
     bbox: Boundingbox,
     rightchild: *const [BvhNode],
