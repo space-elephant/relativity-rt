@@ -3,6 +3,7 @@ use crate::ray::*;
 use crate::vec3::*;
 use crate::material::*;
 use crate::boundingbox::*;
+use crate::colour::*;
 use enum_dispatch::enum_dispatch;
 
 pub type Range = std::ops::Range<f64>;
@@ -13,6 +14,12 @@ pub fn in_range(t: f64, range: Range) -> Option<f64> {
     } else {
 	None
     }
+}
+
+pub struct Request {
+    pub ray: Ray,
+    pub colour: Colour,
+    pub depth: u32,
 }
 
 #[derive(Clone, Debug)]
@@ -161,7 +168,7 @@ pub struct SmokeSphere {
 }
 
 impl SmokeSphere {
-    pub fn new(colour: Colour3, density: f64, center: Point3, radius: f64) -> SmokeSphere {
+    pub fn new(colour: ReflectionSpectrum, density: f64, center: Point3, radius: f64) -> SmokeSphere {
 	SmokeSphere {
 	    center,
 	    radius,
@@ -184,24 +191,24 @@ impl Object for SmokeSphere {
 	    // least intersection is the important one
 	    let factor = discriminant.sqrt();
 	    
-	    let mut t = (-h - factor) / a;
-	    if t >= range.end {
+	    let mut t1 = (-h - factor) / a;
+	    if t1 >= range.end {
 		return None;
 	    }
-	    if t < range.start {
-		t = range.start;
+	    if t1 < range.start {
+		t1 = range.start;
 	    }
 
-	    let collision = t + self.neg_inv_density * rand::random::<f64>().log10();
+	    let collision = t1 + self.neg_inv_density * rand::random::<f64>().log10();
 	    
 	    
-	    let t = (-h + factor) / a;
-	    if collision <= t && range.contains(&collision) {
+	    let t2 = (-h + factor) / a;
+	    if collision <= t2 && range.contains(&collision) {
 		return Some(HitRecord {
 		    ray,
 		    point: ray.at(collision),
-		    normal: -(ray.at(collision) - self.center) / self.radius,
-		    t,
+		    normal: (ray.at(t1) - self.center) / self.radius,
+		    t: collision,
 		    backface: false,
 		    material: self.material.clone(),
 		})

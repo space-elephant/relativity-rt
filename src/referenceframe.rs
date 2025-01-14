@@ -106,9 +106,7 @@ impl BvhBuilder {
     unsafe fn into_copy_sequence(self, block: &mut [MaybeUninit<BvhNode>]) -> usize {
 	match self {
 	    BvhBuilder::Primitive(object) => {
-		unsafe {
-		    block[0].write(BvhNode::Primitive(*object));
-		}
+		block[0].write(BvhNode::Primitive(*object));
 		1
 	    },
 	    BvhBuilder::Split{bbox, axis, left, right} => {
@@ -116,20 +114,19 @@ impl BvhBuilder {
 		
 		let split = left.into_copy_sequence(rest);
 		let end = right.into_copy_sequence(&mut rest[split..]) + split;
-		unsafe {
-		    // rightchild is now fully initialized by the second call
-		    let rightchild = &rest[split..end];
-		    target[0].write(
-			BvhNode::BvhBranch(
-			    BvhBranch {
-				bbox,
-				axis,
-				rightchild: transmute::<&[MaybeUninit<BvhNode>], *const [BvhNode]>
-				    (rightchild),
-			    }
-			)
-		    );
-		}
+		// rightchild is now fully initialized by the second call
+		let rightchild = &rest[split..end];
+		target[0].write(
+		    BvhNode::BvhBranch(
+			BvhBranch {
+			    bbox,
+			    axis,
+			    rightchild: unsafe {
+				transmute::<&[MaybeUninit<BvhNode>], *const [BvhNode]>(rightchild)
+			    },
+			}
+		    )
+		);
 		end + 1
 	    },
 	}

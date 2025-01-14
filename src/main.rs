@@ -28,10 +28,13 @@ use boundingbox::*;
 mod referenceframe;
 use referenceframe::*;
 
+mod colour;
+use colour::*;
+
 const XAXIS: Axis = Axis(1);
 const YAXIS: Axis = Axis(0);
 
-struct Image(Array2<Vec3>);
+struct Image(Array2<Colour3>);
 
 impl Image {
     fn display(&self, filename: &Path) {
@@ -40,6 +43,7 @@ impl Image {
 	result.push(b' ');
 	result.extend_from_slice(self.0.len_of(YAXIS).to_string().as_bytes());
 	result.extend_from_slice(b"\n255\n");
+	
 	for colour in self.0.iter() {
 	    let colour = colour.add_gamma();
 	    for value in [colour.x, colour.y, colour.z] {
@@ -51,26 +55,49 @@ impl Image {
     }
 }
 
-fn ray_colour(ray: Ray, world: &Bvh, depth: u32) -> Colour3 {
-    if depth == 0 {
-	return Colour3::default();
-    }
+fn ray_colour(ray: Ray, world: &Bvh, depth: u32) -> Colour {
+    let mut result = Colour::new([
+	// wavelengths should be ideally randomized
+	ColourSample::new(RED, 0.0),
+	ColourSample::new(GREEN, 0.0),
+	ColourSample::new(BLUE, 0.0),
+    ]);
     
-    if let Some(record) = world.hit(ray, 0.001..f64::INFINITY) {
-	if !(record.normal.dot(ray.direction) <= 0.0) {
-	    // normal is backwards, show error on screen
-	    return Colour3::new(1.0, 0.0, 1.0);
-	}
-	if let Some((attenuation, ray)) = record.material.reflect(&record) {
-	    return attenuation.hadamard(ray_colour(ray, world, depth - 1));
+    let mut stack = Vec::with_capacity(256);
+    stack.push(Request {
+	ray,
+	colour: Colour::new([
+	    ColourSample::new(RED, 1.0),
+	    ColourSample::new(GREEN, 1.0),
+	    ColourSample::new(BLUE, 1.0),
+	]),
+	depth,
+    });
+
+    while let Some(Request{ray, colour, depth}) = stack.pop() {
+	if depth == 0 {
+	    // assume it's just black
+	} else if let Some(record) = world.hit(ray, 0.001..f64::INFINITY) {
+	    if let Some((attenuation, ray)) = record.material.reflect(&record) {
+		let colour = attenuation.attenuate(colour);
+		//ray_colour(ray, world, depth - 1));
+		stack.push(Request{ray, colour, depth: depth - 1});
+	    } else {
+		return Colour::default();
+	    }
 	} else {
-	    return Colour3::default();
+	    let unit_direction = ray.direction.normalized();
+	    let a = 0.5 * (unit_direction.y + 1.0);
+	    //let temperature = (1.0-a)*4000.0 + a*10000.0;
+	    //let origin = Incandescant::new(temperature, 1.0).attenuate(colour);
+	    let origin = Sky::new((1.0-a) * 5300e-9 + a * 400e-9);
+	    //println!("{:?}", origin);
+	    result.add(&origin.attenuate(colour));
+	    //(1.0-a)*Colour3::new(1.0, 1.0, 1.0) + a*Colour3::new(0.5, 0.7, 1.0)
 	}
     }
     
-    let unit_direction = ray.direction.normalized();
-    let a = 0.5 * (unit_direction.y + 1.0);
-    (1.0-a)*Colour3::new(1.0, 1.0, 1.0) + a*Colour3::new(0.5, 0.7, 1.0)
+    result
 }
 
 struct Camera {
@@ -132,26 +159,36 @@ impl Camera {
 	    }
 	    let mut rng = rand::thread_rng();
 
-	    let mut total = Colour3::default();
+	    let mut total = Vec::with_capacity(self.samples_per_pixel as usize);
 	    for _ in 0..self.samples_per_pixel {
 		let pixel_direction = viewport_upper_left + (i as f64 + rng.gen::<f64>()) * inverse_width * viewport_u + (j as f64 + rng.gen::<f64>()) * inverse_height * viewport_v;
 		let ray = Ray::new(self.position, pixel_direction);
-		total += ray_colour(ray, &world, self.max_depth);
+		total.push(ray_colour(ray, &world, self.max_depth));
 	    }
-	    total / self.samples_per_pixel as f64
+	    torgb(&total)
 	}))
     }
 }
 
 fn main() {
-    let elements = vec![
+    /*let elements = vec![
 	Primitive::from(SmokeSphere::new(Colour3::new(0.1, 0.1, 0.1), 1.0, Point3::new(-1.0, 0.0, -1.0), 0.5)),
 	Primitive::from(Sphere::new(Rc::new(Lambertian::new(Colour3::new(0.1, 0.5, 0.1))), Point3::new(0.0, 0.0, -2.0), 0.2)),
 	Primitive::from(Sphere::new(Rc::new(Metal::new(Colour3::new(0.73, 0.45, 0.2), 0.05)), Point3::new(1.0, 0.0, -1.0), 0.5)),
 	Primitive::from(Sphere::new(Rc::new(Dielectric::new(1.5)), Point3::new(0.0, 0.0, -1.0), 0.5)),
 	Primitive::from(Sphere::new(Rc::new(Dielectric::new(1.0 / 1.5)), Point3::new(0.0, 0.0, -1.0), 0.45)),
 	Primitive::from(Sphere::new(Rc::new(Lambertian::new(Colour3::new(0.5, 0.5, 0.5))), Point3::new(0.0, -100.5, -1.0), 100.0)),
+    ];*/
+
+    let elements = vec![
+	Primitive::from(SmokeSphere::new(ReflectionSpectrum::Grey(Grey::new(1.0)), 1.0, Point3::new(-1.0, 0.0, -1.0), 0.5)),
+	Primitive::from(Sphere::new(Rc::new(Lambertian::new(ReflectionSpectrum::Grey(Grey::new(0.1)))), Point3::new(0.0, 0.0, -2.0), 0.2)),
+	Primitive::from(Sphere::new(Rc::new(Metal::new(ReflectionSpectrum::Grey(Grey::new(0.85)), 0.05)), Point3::new(1.0, 0.0, -1.0), 0.5)),
+	Primitive::from(Sphere::new(Rc::new(Dielectric::new(1.5)), Point3::new(0.0, 0.0, -1.0), 0.5)),
+	Primitive::from(Sphere::new(Rc::new(Dielectric::new(1.0 / 1.5)), Point3::new(0.0, 0.0, -1.0), 0.45)),
+	Primitive::from(Sphere::new(Rc::new(Lambertian::new(ReflectionSpectrum::Grey(Grey::new(0.5)))), Point3::new(0.0, -100.5, -1.0), 100.0)),
     ];
+
     //let world = Box::new(Group::new());
     let world = Bvh::new(elements);
     let camera = Camera::new();

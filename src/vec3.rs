@@ -116,6 +116,11 @@ impl Vec3 {
 	const S: f64 = 1e-8;
 	self.x.abs() < S && self.y.abs() < S && self.z.abs() < S
     }
+
+    pub fn max_component(self) -> f64 {
+	let xy = if self.x > self.y {self.x} else {self.y}
+	if xy > self.z {xy} else {self.z}
+    }
 }
 
 // add gamma for one channel, which is 1/2 in this case
@@ -123,6 +128,8 @@ fn linear_add_gamma(value: f64) -> f64 {
     if value < 0.0 {
 	// clamp
 	0.0
+    } else if value > 1.0 {
+	1.0
     } else {
 	value.sqrt()
     }

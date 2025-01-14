@@ -2,19 +2,20 @@ use std::fmt::Debug;
 use crate::ray::*;
 use crate::vec3::*;
 use crate::objects::*;
+use crate::colour::*;
 
 pub trait Material: Debug {
     // self will be contained by record
-    fn reflect(&self, record: &HitRecord) -> Option<(Colour3, Ray)>;
+    fn reflect(&self, record: &HitRecord) -> Option<(ReflectionSpectrum, Ray)>;
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct Lambertian {
-    albedo: Colour3,
+    albedo: ReflectionSpectrum,
 }
 
 impl Lambertian {
-    pub fn new(albedo: Colour3) -> Self {
+    pub fn new(albedo: ReflectionSpectrum) -> Self {
 	Lambertian {
 	    albedo,
 	}
@@ -22,7 +23,7 @@ impl Lambertian {
 }
 
 impl Material for Lambertian {
-    fn reflect(&self, record: &HitRecord) -> Option<(Colour3, Ray)> {
+    fn reflect(&self, record: &HitRecord) -> Option<(ReflectionSpectrum, Ray)> {
 	let mut direction = record.normal + Vec3::random_unit();
 	if direction.near_zero() {
 	    direction = record.normal;
@@ -31,14 +32,14 @@ impl Material for Lambertian {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct Metal {
-    albedo: Colour3,
+    albedo: ReflectionSpectrum,
     fuzz: f64,
 }
 
 impl Metal {
-    pub fn new(albedo: Colour3, fuzz: f64) -> Self {
+    pub fn new(albedo: ReflectionSpectrum, fuzz: f64) -> Self {
 	Metal {
 	    albedo,
 	    fuzz
@@ -47,14 +48,14 @@ impl Metal {
 }
 
 impl Material for Metal {
-    fn reflect(&self, record: &HitRecord) -> Option<(Colour3, Ray)> {
+    fn reflect(&self, record: &HitRecord) -> Option<(ReflectionSpectrum, Ray)> {
 	let reflected = record.ray.direction.reflect(record.normal);
 	let direction = reflected.normalized() + self.fuzz * Vec3::random_unit();
 	Some((self.albedo, Ray::new(record.point, direction)))
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct Dielectric {
     refractive_index: f64,
 }
@@ -74,7 +75,7 @@ impl Dielectric {
 }
 
 impl Material for Dielectric {
-    fn reflect(&self, record: &HitRecord) -> Option<(Colour3, Ray)> {
+    fn reflect(&self, record: &HitRecord) -> Option<(ReflectionSpectrum, Ray)> {
 	let rel_refractive_index = if record.backface {self.refractive_index} else {1.0 / self.refractive_index};
 	let unit_direction = record.ray.direction.normalized();
 	
@@ -82,21 +83,21 @@ impl Material for Dielectric {
 	    let cos = -unit_direction.dot(record.normal);
 	    let probability = Self::reflectance(cos, rel_refractive_index);
 	    if probability <= rand::random() {
-		return Some((Colour3::grey(1.0), Ray::new(record.point, direction)));
+		return Some((ReflectionSpectrum::Grey(Grey::new(1.0)), Ray::new(record.point, direction)));
 	    }
 	}
 	let direction = unit_direction.reflect(record.normal);
-	Some((Colour3::grey(1.0), Ray::new(record.point, direction)))
+	Some((ReflectionSpectrum::Grey(Grey::new(1.0)), Ray::new(record.point, direction)))
     }
 }
 
 #[derive(Debug)]
 pub struct Isotropic {
-    albedo: Colour3,
+    albedo: ReflectionSpectrum,
 }
 
 impl Isotropic {
-    pub fn new(albedo: Colour3) -> Self {
+    pub fn new(albedo: ReflectionSpectrum) -> Self {
 	Isotropic {
 	    albedo,
 	}
@@ -104,7 +105,7 @@ impl Isotropic {
 }
 
 impl Material for Isotropic {
-    fn reflect(&self, record: &HitRecord) -> Option<(Colour3, Ray)> {
+    fn reflect(&self, record: &HitRecord) -> Option<(ReflectionSpectrum, Ray)> {
 	let direction = Vec3::random_unit();
 	Some((self.albedo, Ray::new(record.point, direction)))
     }
