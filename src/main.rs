@@ -53,6 +53,36 @@ impl Image {
 	let mut file = File::create(filename).unwrap();
 	file.write_all(&result).unwrap();
     }
+
+    fn normalize(&mut self) {
+	// ensure all values are in the range [0, 1]
+	// Welford's algorithm from
+	// https://en.wikipedia.org/wiki/Algorithms_for_calculating_variance
+	let mut count: f64 = 0.0;
+	let mut mean: f64 = 0.0;
+	let mut m2: f64 = 0.0;
+
+	for colour in self.0.iter() {
+	    let brightness = colour.max_component();
+	    count += 1.0;
+	    let delta = brightness - mean;
+	    mean += delta / count;
+	    let delta2 = brightness - mean;
+	    m2 += delta * delta2;
+	}
+
+	let stdev = (m2 / count).sqrt();
+
+	// adjust exposure
+	let adjust = 1.0 / (mean + 1.5 * stdev);
+	
+	for colour in self.0.iter_mut() {
+	    *colour *= adjust;
+	    if colour.max_component() > 1.0 {
+		*colour /= colour.max_component();
+	    }
+	}
+    }
 }
 
 fn ray_colour(ray: Ray, world: &Bvh, depth: u32) -> Colour {
@@ -88,9 +118,9 @@ fn ray_colour(ray: Ray, world: &Bvh, depth: u32) -> Colour {
 	} else {
 	    let unit_direction = ray.direction.normalized();
 	    let a = 0.5 * (unit_direction.y + 1.0);
-	    //let temperature = (1.0-a)*4000.0 + a*10000.0;
-	    //let origin = Incandescant::new(temperature, 1.0).attenuate(colour);
-	    let origin = Sky::new((1.0-a) * 5300e-9 + a * 400e-9);
+	    let temperature = (1.0-a)*4000.0 + a*10000.0;
+	    let origin = Incandescant::new(temperature, 1.0);
+	    //let origin = Sky::new((1.0-a) * 5300e-9 + a * 400e-9);
 	    //println!("{:?}", origin);
 	    result.add(&origin.attenuate(colour));
 	    //(1.0-a)*Colour3::new(1.0, 1.0, 1.0) + a*Colour3::new(0.5, 0.7, 1.0)
@@ -192,6 +222,7 @@ fn main() {
     //let world = Box::new(Group::new());
     let world = Bvh::new(elements);
     let camera = Camera::new();
-    let image = camera.render(world);
+    let mut image = camera.render(world);
+    image.normalize();
     image.display(Path::new("output.ppm"));
 }

@@ -54,14 +54,6 @@ impl Vec3 {
 	)
     }
 
-    pub fn hadamard(self, other: Self) -> Self {
-	Vec3::new(
-	    self.x * other.x,
-	    self.y * other.y,
-	    self.z * other.z,
-	)
-    }
-
     // reflect incidant ray direction about unit normal
     pub fn reflect(self, normal: Self) -> Self {
 	self - 2.0 * self.dot(normal) * normal
@@ -118,7 +110,7 @@ impl Vec3 {
     }
 
     pub fn max_component(self) -> f64 {
-	let xy = if self.x > self.y {self.x} else {self.y}
+	let xy = if self.x > self.y {self.x} else {self.y};
 	if xy > self.z {xy} else {self.z}
     }
 }
@@ -128,8 +120,6 @@ fn linear_add_gamma(value: f64) -> f64 {
     if value < 0.0 {
 	// clamp
 	0.0
-    } else if value > 1.0 {
-	1.0
     } else {
 	value.sqrt()
     }
