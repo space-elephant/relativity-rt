@@ -2,7 +2,7 @@ use enum_dispatch::enum_dispatch;
 use crate::vec3::*;
 
 const KB: f64 = 1.380649e-23;// J/K
-const H: f64 = 6.62607015e-32;// J/Hz
+const H: f64 = 6.62607015e-34;// J/Hz
 const C: f64 = 299792458.0;// m/s
 
 pub const RED: f64 = 640e-9;
@@ -106,7 +106,8 @@ impl Incandescant {
 impl Spectrum for Incandescant {
     fn reflectance(&self, wavelength: f64) -> f64 {
 	let f = C / wavelength;
-	self.attenuation * (2.0*H * f*f*f) / (C*C * (((H*f)/(KB*self.temperature)).exp() - 1.0))
+	let exponential = ((H*f)/(KB*self.temperature)).exp() - 1.0;
+	self.attenuation * (2.0 * H * f.powi(3)) / (C.powi(2) * exponential)
     }
 }
 

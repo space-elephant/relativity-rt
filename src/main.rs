@@ -118,7 +118,7 @@ fn ray_colour(ray: Ray, world: &Bvh, depth: u32) -> Colour {
 	} else {
 	    let unit_direction = ray.direction.normalized();
 	    let a = 0.5 * (unit_direction.y + 1.0);
-	    let temperature = (1.0-a)*4000.0 + a*10000.0;
+	    let temperature = (1.0-a)*10000.0 + a*4000.0;
 	    let origin = Incandescant::new(temperature, 1.0);
 	    //let origin = Sky::new((1.0-a) * 5300e-9 + a * 400e-9);
 	    //println!("{:?}", origin);
@@ -212,7 +212,7 @@ fn main() {
 
     let elements = vec![
 	Primitive::from(SmokeSphere::new(ReflectionSpectrum::Grey(Grey::new(1.0)), 1.0, Point3::new(-1.0, 0.0, -1.0), 0.5)),
-	Primitive::from(Sphere::new(Rc::new(Lambertian::new(ReflectionSpectrum::Grey(Grey::new(0.1)))), Point3::new(0.0, 0.0, -2.0), 0.2)),
+	Primitive::from(Sphere::new(Rc::new(Lambertian::new(ReflectionSpectrum::Grey(Grey::new(0.3)))), Point3::new(0.0, 0.0, -2.0), 0.2)),
 	Primitive::from(Sphere::new(Rc::new(Metal::new(ReflectionSpectrum::Grey(Grey::new(0.85)), 0.05)), Point3::new(1.0, 0.0, -1.0), 0.5)),
 	Primitive::from(Sphere::new(Rc::new(Dielectric::new(1.5)), Point3::new(0.0, 0.0, -1.0), 0.5)),
 	Primitive::from(Sphere::new(Rc::new(Dielectric::new(1.0 / 1.5)), Point3::new(0.0, 0.0, -1.0), 0.45)),
