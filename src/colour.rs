@@ -35,6 +35,12 @@ impl Colour {
     pub fn new(samples: [ColourSample; 3]) -> Colour {
 	Colour(samples)
     }
+
+    pub fn mul_wavelength(&mut self, factor: f64) {
+	for mut sample in self.0 {
+	    sample.wavelength *= factor;
+	}
+    }
 }
 
 pub fn torgb(blocks: &[Colour]) -> Colour3 {

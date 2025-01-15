@@ -8,7 +8,8 @@ use std::ffi::OsStr;
 use std::cmp;
 use rand::Rng;
 use std::ops::Add;
-use std::rc::Rc;
+use std::thread;
+use std::sync::Arc;
 
 mod vec3;
 use vec3::*;
@@ -30,6 +31,9 @@ use referenceframe::*;
 
 mod colour;
 use colour::*;
+
+mod relativity;
+use relativity::*;
 
 const XAXIS: Axis = Axis(1);
 const YAXIS: Axis = Axis(0);
@@ -118,7 +122,7 @@ fn ray_colour(ray: Ray, world: &Bvh, depth: u32) -> Colour {
 	} else {
 	    let unit_direction = ray.direction.normalized();
 	    let a = 0.5 * (unit_direction.y + 1.0);
-	    let temperature = (1.0-a)*10000.0 + a*4000.0;
+	    let temperature = (1.0-a)*4000.0 + a*10000.0;
 	    let origin = Incandescant::new(temperature, 1.0);
 	    //let origin = Sky::new((1.0-a) * 5300e-9 + a * 400e-9);
 	    //println!("{:?}", origin);
@@ -165,6 +169,53 @@ impl Camera {
     }
     
     fn render(&self, world: Bvh) -> Image {
+	let cpus = num_cpus::get();
+
+	let mut pixels = Vec::with_capacity(cpus);
+	thread::scope(|s| {
+	    let mut threads = Vec::with_capacity(cpus);
+	    
+	    for threadindex in 0..cpus {
+		let worldref = &world;
+		threads.push(s.spawn(move || {
+		    self.render_thread(worldref, threadindex, cpus)
+		}));
+	    }
+	    
+	    for thread in threads {
+		pixels.push(thread.join().unwrap());
+	    }
+	});
+	
+	/*Image(Array2::from_shape_fn((self.image_height, self.image_width), |(j, i)| {
+	    if i == 0 {
+		println!("Remaining scanlines: {}", self.image_height - j);
+	    }
+	    let mut rng = rand::thread_rng();
+
+	    let mut total = Vec::with_capacity(self.samples_per_pixel as usize);
+	    for _ in 0..self.samples_per_pixel {
+		let pixel_direction = viewport_upper_left + (i as f64 + rng.gen::<f64>()) * inverse_width * viewport_u + (j as f64 + rng.gen::<f64>()) * inverse_height * viewport_v;
+		let ray = Ray::new(self.position, pixel_direction);
+		total.push(ray_colour(ray, &world, self.max_depth));
+	    }
+	    torgb(&total)
+    }))*/
+
+	let mut thread = 0;
+	let mut index = 0;
+	Image(Array2::from_shape_simple_fn((self.image_height, self.image_width), || {
+	    let result = pixels[thread][index];
+	    thread += 1;
+	    if thread >= cpus {
+		thread = 0;
+		index += 1;
+	    }
+	    result
+	}))
+    }
+
+    fn render_thread(&self, world: &Bvh, threadindex: usize, cpus: usize) -> Vec<Vec3> {
 	let focal_length: f64 = self.direction.length();
 	let h = (self.vfov / 2.0).tan();
 	let viewport_height: f64 = 2.0 * h * focal_length;
@@ -183,11 +234,18 @@ impl Camera {
 	let inverse_width = 1.0 / self.image_width as f64;
 	let inverse_height = 1.0 / self.image_height as f64;
 	
-	Image(Array2::from_shape_fn((self.image_height, self.image_width), |(j, i)| {
+	let pixels = self.image_width * self.image_height;
+	let mut rng = rand::thread_rng();
+
+	let mut result = Vec::with_capacity(pixels / cpus + 1);
+
+	for pixel in (0..pixels).skip(threadindex).step_by(cpus) {
+	    let j = pixel / self.image_width;
+	    let i = pixel % self.image_width;
+
 	    if i == 0 {
-		println!("Remaining scanlines: {}", self.image_height - j);
+		println!("Progress: {}%", j * 100 / self.image_height);
 	    }
-	    let mut rng = rand::thread_rng();
 
 	    let mut total = Vec::with_capacity(self.samples_per_pixel as usize);
 	    for _ in 0..self.samples_per_pixel {
@@ -195,28 +253,30 @@ impl Camera {
 		let ray = Ray::new(self.position, pixel_direction);
 		total.push(ray_colour(ray, &world, self.max_depth));
 	    }
-	    torgb(&total)
-	}))
+	    result.push(torgb(&total))
+	}
+
+	result
     }
 }
 
 fn main() {
     /*let elements = vec![
 	Primitive::from(SmokeSphere::new(Colour3::new(0.1, 0.1, 0.1), 1.0, Point3::new(-1.0, 0.0, -1.0), 0.5)),
-	Primitive::from(Sphere::new(Rc::new(Lambertian::new(Colour3::new(0.1, 0.5, 0.1))), Point3::new(0.0, 0.0, -2.0), 0.2)),
-	Primitive::from(Sphere::new(Rc::new(Metal::new(Colour3::new(0.73, 0.45, 0.2), 0.05)), Point3::new(1.0, 0.0, -1.0), 0.5)),
-	Primitive::from(Sphere::new(Rc::new(Dielectric::new(1.5)), Point3::new(0.0, 0.0, -1.0), 0.5)),
-	Primitive::from(Sphere::new(Rc::new(Dielectric::new(1.0 / 1.5)), Point3::new(0.0, 0.0, -1.0), 0.45)),
-	Primitive::from(Sphere::new(Rc::new(Lambertian::new(Colour3::new(0.5, 0.5, 0.5))), Point3::new(0.0, -100.5, -1.0), 100.0)),
+	Primitive::from(Sphere::new(Arc::new(Lambertian::new(Colour3::new(0.1, 0.5, 0.1))), Point3::new(0.0, 0.0, -2.0), 0.2)),
+	Primitive::from(Sphere::new(Arc::new(Metal::new(Colour3::new(0.73, 0.45, 0.2), 0.05)), Point3::new(1.0, 0.0, -1.0), 0.5)),
+	Primitive::from(Sphere::new(Arc::new(Dielectric::new(1.5)), Point3::new(0.0, 0.0, -1.0), 0.5)),
+	Primitive::from(Sphere::new(Arc::new(Dielectric::new(1.0 / 1.5)), Point3::new(0.0, 0.0, -1.0), 0.45)),
+	Primitive::from(Sphere::new(Arc::new(Lambertian::new(Colour3::new(0.5, 0.5, 0.5))), Point3::new(0.0, -100.5, -1.0), 100.0)),
     ];*/
 
     let elements = vec![
 	Primitive::from(SmokeSphere::new(ReflectionSpectrum::Grey(Grey::new(1.0)), 1.0, Point3::new(-1.0, 0.0, -1.0), 0.5)),
-	Primitive::from(Sphere::new(Rc::new(Lambertian::new(ReflectionSpectrum::Grey(Grey::new(0.3)))), Point3::new(0.0, 0.0, -2.0), 0.2)),
-	Primitive::from(Sphere::new(Rc::new(Metal::new(ReflectionSpectrum::Grey(Grey::new(0.85)), 0.05)), Point3::new(1.0, 0.0, -1.0), 0.5)),
-	Primitive::from(Sphere::new(Rc::new(Dielectric::new(1.5)), Point3::new(0.0, 0.0, -1.0), 0.5)),
-	Primitive::from(Sphere::new(Rc::new(Dielectric::new(1.0 / 1.5)), Point3::new(0.0, 0.0, -1.0), 0.45)),
-	Primitive::from(Sphere::new(Rc::new(Lambertian::new(ReflectionSpectrum::Grey(Grey::new(0.5)))), Point3::new(0.0, -100.5, -1.0), 100.0)),
+	Primitive::from(Sphere::new(Arc::new(Lambertian::new(ReflectionSpectrum::Grey(Grey::new(0.3)))), Point3::new(0.0, 0.0, -2.0), 0.2)),
+	Primitive::from(Sphere::new(Arc::new(Metal::new(ReflectionSpectrum::Grey(Grey::new(0.85)), 0.05)), Point3::new(1.0, 0.0, -1.0), 0.5)),
+	Primitive::from(Sphere::new(Arc::new(Dielectric::new(1.5)), Point3::new(0.0, 0.0, -1.0), 0.5)),
+	Primitive::from(Sphere::new(Arc::new(Dielectric::new(1.0 / 1.5)), Point3::new(0.0, 0.0, -1.0), 0.45)),
+	Primitive::from(Sphere::new(Arc::new(Lambertian::new(ReflectionSpectrum::Grey(Grey::new(0.5)))), Point3::new(0.0, -100.5, -1.0), 100.0)),
     ];
 
     //let world = Box::new(Group::new());

@@ -4,7 +4,7 @@ use crate::vec3::*;
 use crate::objects::*;
 use crate::colour::*;
 
-pub trait Material: Debug {
+pub trait Material: Debug + Send + Sync {
     // self will be contained by record
     fn reflect(&self, record: &HitRecord) -> Option<(ReflectionSpectrum, Ray)>;
 }

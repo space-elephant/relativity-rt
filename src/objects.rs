@@ -1,10 +1,10 @@
-use std::rc::Rc;
 use crate::ray::*;
 use crate::vec3::*;
 use crate::material::*;
 use crate::boundingbox::*;
 use crate::colour::*;
 use enum_dispatch::enum_dispatch;
+use std::sync::Arc;
 
 pub type Range = std::ops::Range<f64>;
 
@@ -29,11 +29,11 @@ pub struct HitRecord {
     pub normal: Vec3,
     pub t: f64,
     pub backface: bool,
-    pub material: Rc<dyn Material>,
+    pub material: Arc<dyn Material>,
 }
 
 impl HitRecord {
-    pub fn with_ray(point: Point3, mut normal: Vec3, t: f64, ray: Ray, material: Rc<dyn Material>) -> Self {
+    pub fn with_ray(point: Point3, mut normal: Vec3, t: f64, ray: Ray, material: Arc<dyn Material>) -> Self {
 	let backface = ray.direction.dot(normal) > 0.0;
 	if backface {
 	    normal = -normal
@@ -66,11 +66,11 @@ pub enum Primitive {
 pub struct Sphere {
     center: Point3,
     radius: f64,
-    material: Rc<dyn Material>,
+    material: Arc<dyn Material>,
 }
 
 impl Sphere {
-    pub fn new(material: Rc<dyn Material>, center: Point3, radius: f64) -> Sphere {
+    pub fn new(material: Arc<dyn Material>, center: Point3, radius: f64) -> Sphere {
 	Sphere {
 	    center,
 	    radius,
@@ -163,7 +163,7 @@ impl Object for Group {
 pub struct SmokeSphere {
     center: Point3,
     radius: f64,
-    material: Rc<dyn Material>,
+    material: Arc<dyn Material>,
     neg_inv_density: f64,
 }
 
@@ -172,7 +172,7 @@ impl SmokeSphere {
 	SmokeSphere {
 	    center,
 	    radius,
-	    material: Rc::new(Isotropic::new(colour)),
+	    material: Arc::new(Isotropic::new(colour)),
 	    neg_inv_density: -1.0 / density,
 	}
     }

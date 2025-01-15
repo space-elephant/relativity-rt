@@ -8,4 +8,5 @@ edition = "2021"
 [dependencies]
 enum_dispatch = "0.3.13"
 ndarray = "0.16.1"
+num_cpus = "1.16.0"
 rand = "0.8.5"

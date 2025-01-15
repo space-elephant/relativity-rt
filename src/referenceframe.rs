@@ -241,3 +241,7 @@ struct BvhBranch {
     rightchild: *const [BvhNode],
     axis: Axis,
 }
+
+// needed for the *const [BvhNode], which is known to have no mutable access so it's fine
+unsafe impl Sync for BvhBranch {}
+unsafe impl Send for BvhBranch {}
