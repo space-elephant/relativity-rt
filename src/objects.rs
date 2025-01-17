@@ -51,6 +51,7 @@ impl HitRecord {
 
 #[enum_dispatch]
 pub trait Object {
+    // target will be None initialized, may add to any parts but must attenuate apropriately
     fn hit(&self, ray: Ray, range: Range) -> Option<HitRecord>;
     fn boundingbox(&self) -> Boundingbox;
 }
@@ -59,6 +60,7 @@ pub trait Object {
 #[enum_dispatch(Object)]
 pub enum Primitive {
     Sphere(Sphere),
+    Triangle(Triangle),
     SmokeSphere(SmokeSphere),
 }
 
@@ -101,7 +103,7 @@ impl Object for Sphere {
 		    t,
 		    backface: false,
 		    material: self.material.clone(),
-		})
+		});
 	    }
 	    
 	    let t = (-h + factor) / a;
@@ -113,7 +115,7 @@ impl Object for Sphere {
 		    t,
 		    backface: true,
 		    material: self.material.clone(),
-		})
+		});
 	    }
 	    None
 	}
@@ -126,34 +128,72 @@ impl Object for Sphere {
 }
 
 #[derive(Debug)]
-pub struct Group {
-    objects: Vec<Primitive>,
+pub struct Triangle {
+    normal: Vec3,
+    height: f64,// -D in standard form
+    origin: Point3,
+    u: Vec3,
+    v: Vec3,
+    material: Arc<dyn Material>,
 }
 
-impl Group {
-    pub fn new(objects: Vec<Primitive>) -> Self {
-	Group {
-	    objects,
+impl Triangle {
+    // try to maximize angle at point 0
+    pub fn new(material: Arc<dyn Material>, points: [Point3; 3]) -> Triangle {
+	let origin = points[0];
+	let u = points[1] - origin;
+	let v = points[2] - origin;
+	let normal = u.cross(v).normalized();
+	let height = normal.dot(origin);
+	
+	Triangle {
+	    normal,
+	    height,
+	    origin,
+	    u,
+	    v,
+	    material,
 	}
     }
 }
 
-impl Object for Group {
-    fn hit(&self, ray: Ray, mut range: Range) -> Option<HitRecord> {
-	let mut best: Option<HitRecord> = None;
-	for object in &self.objects {
-	    if let Some(collision) = object.hit(ray, range.clone()) {
-		range.end = collision.t;
-		best = Some(collision);
-	    }
+impl Object for Triangle {
+    fn hit(&self, ray: Ray, range: Range) -> Option<HitRecord> {
+	let t = (self.height - self.normal.dot(ray.origin)) / self.normal.dot(ray.direction);
+	if !range.contains(&t) {
+	    // including if t is Infinity or NaN
+	    return None;
 	}
-	best
+
+	let point = ray.at(t);
+	let offset = point - self.origin;
+	let ufactor = offset.dot(self.u);
+	let vfactor = offset.dot(self.v);
+
+	/*if ufactor + vfactor > 1.0 {
+	    println!("{ufactor}, {vfactor}");
+	}*/
+
+	if ufactor < 0.0 || vfactor < 0.0 || ufactor + vfactor > 1.0 {
+	    return None;
+	}
+
+	// should be negative
+	let backface = self.normal.dot(ray.direction) > 0.0;
+	Some(HitRecord {
+	    ray,
+	    point,
+	    normal: if backface {-self.normal} else {self.normal},
+	    t,
+	    backface,
+	    material: self.material.clone(),
+	})
     }
     
     fn boundingbox(&self) -> Boundingbox {
 	let mut result = Default::default();
-	for object in &self.objects {
-	    result += object.boundingbox();
+	for offset in [Default::default(), self.u, self.v] {
+	    result += Boundingbox::from_point(self.origin + offset);
 	}
 	result
     }
@@ -201,7 +241,6 @@ impl Object for SmokeSphere {
 
 	    let collision = t1 + self.neg_inv_density * rand::random::<f64>().log10();
 	    
-	    
 	    let t2 = (-h + factor) / a;
 	    if collision <= t2 && range.contains(&collision) {
 		return Some(HitRecord {
@@ -211,7 +250,7 @@ impl Object for SmokeSphere {
 		    t: collision,
 		    backface: false,
 		    material: self.material.clone(),
-		})
+		});
 	    }
 	    None
 	}

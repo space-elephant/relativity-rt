@@ -37,9 +37,17 @@ impl Colour {
     }
 
     pub fn mul_wavelength(&mut self, factor: f64) {
-	for mut sample in self.0 {
+	// careful to modify and not copy
+	for sample in &mut self.0 {
 	    sample.wavelength *= factor;
 	}
+    }
+
+    pub fn empty(mut self) -> Colour {
+	for mut dest in self.0 {
+	    dest.intensity = 0.0;
+	}
+	self
     }
 }
 

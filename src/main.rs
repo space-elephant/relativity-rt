@@ -89,7 +89,8 @@ impl Image {
     }
 }
 
-fn ray_colour(ray: Ray, world: &Bvh, depth: u32) -> Colour {
+fn ray_colour(ray: Ray, colour: Colour, world: &Bvh, maxdepth: u32) -> Colour {
+    //println!("start with {:?}", colour);
     let mut result = Colour::new([
 	// wavelengths should be ideally randomized
 	ColourSample::new(RED, 0.0),
@@ -100,34 +101,28 @@ fn ray_colour(ray: Ray, world: &Bvh, depth: u32) -> Colour {
     let mut stack = Vec::with_capacity(256);
     stack.push(Request {
 	ray,
-	colour: Colour::new([
-	    ColourSample::new(RED, 1.0),
-	    ColourSample::new(GREEN, 1.0),
-	    ColourSample::new(BLUE, 1.0),
-	]),
-	depth,
+	colour,
+	depth: 0,
     });
 
     while let Some(Request{ray, colour, depth}) = stack.pop() {
-	if depth == 0 {
+	if depth >= maxdepth {
 	    // assume it's just black
-	} else if let Some(record) = world.hit(ray, 0.001..f64::INFINITY) {
-	    if let Some((attenuation, ray)) = record.material.reflect(&record) {
-		let colour = attenuation.attenuate(colour);
-		//ray_colour(ray, world, depth - 1));
-		stack.push(Request{ray, colour, depth: depth - 1});
-	    } else {
-		return Colour::default();
-	    }
 	} else {
-	    let unit_direction = ray.direction.normalized();
-	    let a = 0.5 * (unit_direction.y + 1.0);
-	    let temperature = (1.0-a)*4000.0 + a*10000.0;
-	    let origin = Incandescant::new(temperature, 1.0);
-	    //let origin = Sky::new((1.0-a) * 5300e-9 + a * 400e-9);
-	    //println!("{:?}", origin);
-	    result.add(&origin.attenuate(colour));
-	    //(1.0-a)*Colour3::new(1.0, 1.0, 1.0) + a*Colour3::new(0.5, 0.7, 1.0)
+	    if let Some(record) = world.hit(ray, 0.001..f64::INFINITY) {
+		if let Some((attenuation, ray)) = record.material.reflect(&record) {
+		    let colour = attenuation.attenuate(colour);
+		    stack.push(Request{ray, colour, depth: depth + 1});
+		} else {
+		    return Colour::default();
+		}
+	    } else {
+		let unit_direction = ray.direction.normalized();
+		let a = 0.5 * (unit_direction.y + 1.0);
+		let temperature = (1.0-a)*4000.0 + a*10000.0;
+		let origin = Incandescant::new(temperature, 1.0);
+		result.add(&origin.attenuate(colour));
+	    }
 	}
     }
     
@@ -142,6 +137,7 @@ struct Camera {
     samples_per_pixel: u32,
     max_depth: u32,
     vfov: f64,
+    velocity: Vec3,
 }
 
 impl Camera {
@@ -152,6 +148,7 @@ impl Camera {
 	let samples_per_pixel = 64;
 	let max_depth = 32;
 	let vfov = 36.87_f64.to_radians() * 2.0;
+	let velocity = Vec3::new(0.0, 0.0, 0.0);
 
 	let position = Point3::new(-0.5, 1.0, 0.5);
 	let target = Point3::new(0.0, 0.0, -1.0);
@@ -165,6 +162,7 @@ impl Camera {
 	    samples_per_pixel,
 	    max_depth,
 	    vfov,
+	    velocity,
 	}
     }
     
@@ -187,21 +185,6 @@ impl Camera {
 	    }
 	});
 	
-	/*Image(Array2::from_shape_fn((self.image_height, self.image_width), |(j, i)| {
-	    if i == 0 {
-		println!("Remaining scanlines: {}", self.image_height - j);
-	    }
-	    let mut rng = rand::thread_rng();
-
-	    let mut total = Vec::with_capacity(self.samples_per_pixel as usize);
-	    for _ in 0..self.samples_per_pixel {
-		let pixel_direction = viewport_upper_left + (i as f64 + rng.gen::<f64>()) * inverse_width * viewport_u + (j as f64 + rng.gen::<f64>()) * inverse_height * viewport_v;
-		let ray = Ray::new(self.position, pixel_direction);
-		total.push(ray_colour(ray, &world, self.max_depth));
-	    }
-	    torgb(&total)
-    }))*/
-
 	let mut thread = 0;
 	let mut index = 0;
 	Image(Array2::from_shape_simple_fn((self.image_height, self.image_width), || {
@@ -249,9 +232,15 @@ impl Camera {
 
 	    let mut total = Vec::with_capacity(self.samples_per_pixel as usize);
 	    for _ in 0..self.samples_per_pixel {
-		let pixel_direction = viewport_upper_left + (i as f64 + rng.gen::<f64>()) * inverse_width * viewport_u + (j as f64 + rng.gen::<f64>()) * inverse_height * viewport_v;
-		let ray = Ray::new(self.position, pixel_direction);
-		total.push(ray_colour(ray, &world, self.max_depth));
+		let pixel_direction = (viewport_upper_left + (i as f64 + rng.gen::<f64>()) * inverse_width * viewport_u + (j as f64 + rng.gen::<f64>()) * inverse_height * viewport_v).normalized();
+		let mut ray = Ray::new(self.position, pixel_direction);
+		let mut colour = Colour::new([
+		    ColourSample::new(RED, 1.0),
+		    ColourSample::new(GREEN, 1.0),
+		    ColourSample::new(BLUE, 1.0),
+		]);
+		lorentz(&mut ray.direction, &mut colour, self.velocity);
+		total.push(ray_colour(ray, colour, &world, self.max_depth));
 	    }
 	    result.push(torgb(&total))
 	}
@@ -271,12 +260,15 @@ fn main() {
     ];*/
 
     let elements = vec![
-	Primitive::from(SmokeSphere::new(ReflectionSpectrum::Grey(Grey::new(1.0)), 1.0, Point3::new(-1.0, 0.0, -1.0), 0.5)),
-	Primitive::from(Sphere::new(Arc::new(Lambertian::new(ReflectionSpectrum::Grey(Grey::new(0.3)))), Point3::new(0.0, 0.0, -2.0), 0.2)),
+	Primitive::from(SmokeSphere::new(ReflectionSpectrum::Grey(Grey::new(1.0)), 0.3, Point3::new(0.0, 0.0, -1.0), 0.35)),
+//	Primitive::from(Sphere::new(Arc::new(Lambertian::new(ReflectionSpectrum::Grey(Grey::new(0.4)))), Point3::new(0.0, 0.0, -2.0), 0.2)),
 	Primitive::from(Sphere::new(Arc::new(Metal::new(ReflectionSpectrum::Grey(Grey::new(0.85)), 0.05)), Point3::new(1.0, 0.0, -1.0), 0.5)),
 	Primitive::from(Sphere::new(Arc::new(Dielectric::new(1.5)), Point3::new(0.0, 0.0, -1.0), 0.5)),
-	Primitive::from(Sphere::new(Arc::new(Dielectric::new(1.0 / 1.5)), Point3::new(0.0, 0.0, -1.0), 0.45)),
+	Primitive::from(Sphere::new(Arc::new(Dielectric::new(1.0 / 1.5)), Point3::new(0.0, 0.0, -1.0), 0.35)),
 	Primitive::from(Sphere::new(Arc::new(Lambertian::new(ReflectionSpectrum::Grey(Grey::new(0.5)))), Point3::new(0.0, -100.5, -1.0), 100.0)),
+
+	Primitive::from(Triangle::new(Arc::new(Lambertian::new(ReflectionSpectrum::Grey(Grey::new(0.4)))), [Point3::new(-1.0, 0.0, -2.0), Point3::new(1.0, 0.0, -2.0), Point3::new(0.0, 1.0, -2.5)])),
+	
     ];
 
     //let world = Box::new(Group::new());
