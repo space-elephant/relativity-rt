@@ -142,16 +142,16 @@ struct Camera {
 }
 
 impl Camera {
-    fn new() -> Camera {
+    fn new(velocity: Vec3, position: Point3) -> Camera {
 	let aspect_ratio: f64 = 16.0 / 9.0;
 	let image_width = 640;
 	let image_height = ((image_width as f64 / aspect_ratio) as usize).max(1);
 	let samples_per_pixel = Arc::new([64, 1]);
 	let max_depth = 8;
 	let vfov = 36.87_f64.to_radians() * 2.0;
-	let velocity = Vec3::new(0.0, 0.0, 0.0);
+	//let velocity = Vec3::new(0.0, 0.0, 0.5);
 
-	let position = Point3::new(-0.5, 1.0, 0.5);
+	//let position = Point3::new(-0.5, 1.0, 0.5);
 	let target = Point3::new(0.0, 0.0, -1.0);
 	let direction = position - target;
 	
@@ -171,7 +171,7 @@ impl Camera {
 	self.position += timestep * self.velocity;
     }
     
-    fn render(&self, world: Bvh) -> Image {
+    fn render(&self, world: &Bvh) -> Image {
 	let cpus = num_cpus::get();
 
 	let mut pixels = Vec::with_capacity(cpus);
@@ -179,9 +179,8 @@ impl Camera {
 	    let mut threads = Vec::with_capacity(cpus);
 	    
 	    for threadindex in 0..cpus {
-		let worldref = &world;
 		threads.push(s.spawn(move || {
-		    self.render_thread(worldref, threadindex, cpus)
+		    self.render_thread(world, threadindex, cpus)
 		}));
 	    }
 	    
@@ -231,9 +230,9 @@ impl Camera {
 	    let j = pixel / self.image_width;
 	    let i = pixel % self.image_width;
 
-	    if i == 0 {
+	    /*if i == 0 {
 		println!("Progress: {}%", j * 100 / self.image_height);
-	    }
+	    }*/
 
 	    let mut total = Vec::with_capacity(self.samples_per_pixel[0] as usize);
 	    for _ in 0..self.samples_per_pixel[0] {
@@ -278,8 +277,27 @@ fn main() {
 
     //let world = Box::new(Group::new());
     let world = Bvh::new(elements);
-    let camera = Camera::new();
-    let mut image = camera.render(world);
+
+    let mut camera = Camera::new(Vec3::new(0.0, 0.0, 0.0), Point3::new(-0.5, 1.5, 7.5));
+
+    println!("start");
+    let mut image = camera.render(&world);
     image.normalize();
-    image.display(Path::new("output.ppm"));
+    image.display(Path::new("frame000.ppm"));
+
+    camera.velocity = Vec3::new(0.0, 0.0, -0.5);
+    for i in 0..64 {
+	println!("{i} / 64");
+	let mut image = camera.render(&world);
+	image.normalize();
+	image.display(Path::new(&format!("frame{:0>3}.ppm", i + 1)));
+	camera.step(0.8);
+    }
+
+    camera.velocity = Vec3::new(0.0, 0.0, 0.0);
+    println!("end");
+    let mut image = camera.render(&world);
+    image.normalize();
+    image.display(Path::new("frame065.ppm"));
+
 }
