@@ -43,6 +43,13 @@ impl Colour {
 	}
     }
 
+    pub fn times_intensity(mut self, factor: f64) -> Colour {
+	for sample in &mut self.0 {
+	    sample.intensity *= factor;
+	}
+	self
+    }
+
     pub fn empty(mut self) -> Colour {
 	for mut dest in self.0 {
 	    dest.intensity = 0.0;

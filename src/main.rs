@@ -89,7 +89,7 @@ impl Image {
     }
 }
 
-fn ray_colour(ray: Ray, colour: Colour, world: &Bvh, maxdepth: u32) -> Colour {
+fn ray_colour(ray: Ray, colour: Colour, world: &Bvh, maxdepth: u32, maxraystable: &[u32]) -> Colour {
     //println!("start with {:?}", colour);
     let mut result = Colour::new([
 	// wavelengths should be ideally randomized
@@ -110,11 +110,12 @@ fn ray_colour(ray: Ray, colour: Colour, world: &Bvh, maxdepth: u32) -> Colour {
 	    // assume it's just black
 	} else {
 	    if let Some(record) = world.hit(ray, 0.001..f64::INFINITY) {
-		if let Some((attenuation, ray)) = record.material.reflect(&record) {
-		    let colour = attenuation.attenuate(colour);
+		let maxrays = maxraystable[(depth as usize).min(maxraystable.len() - 1)];
+		let reflection = record.material.reflect(&record, maxrays);
+		let invrays: f64 = 1.0 / reflection.len() as f64;
+		for (attenuation, ray) in reflection {
+		    let colour = attenuation.attenuate(colour).times_intensity(invrays);
 		    stack.push(Request{ray, colour, depth: depth + 1});
-		} else {
-		    return Colour::default();
 		}
 	    } else {
 		let unit_direction = ray.direction.normalized();
@@ -134,7 +135,7 @@ struct Camera {
     image_height: usize,
     position: Point3,
     direction: Vec3,
-    samples_per_pixel: u32,
+    samples_per_pixel: Arc<[u32]>,
     max_depth: u32,
     vfov: f64,
     velocity: Vec3,
@@ -145,8 +146,8 @@ impl Camera {
 	let aspect_ratio: f64 = 16.0 / 9.0;
 	let image_width = 640;
 	let image_height = ((image_width as f64 / aspect_ratio) as usize).max(1);
-	let samples_per_pixel = 64;
-	let max_depth = 32;
+	let samples_per_pixel = Arc::new([64, 1]);
+	let max_depth = 8;
 	let vfov = 36.87_f64.to_radians() * 2.0;
 	let velocity = Vec3::new(0.0, 0.0, 0.0);
 
@@ -164,6 +165,10 @@ impl Camera {
 	    vfov,
 	    velocity,
 	}
+    }
+
+    fn step(&mut self, timestep: f64) {
+	self.position += timestep * self.velocity;
     }
     
     fn render(&self, world: Bvh) -> Image {
@@ -230,8 +235,8 @@ impl Camera {
 		println!("Progress: {}%", j * 100 / self.image_height);
 	    }
 
-	    let mut total = Vec::with_capacity(self.samples_per_pixel as usize);
-	    for _ in 0..self.samples_per_pixel {
+	    let mut total = Vec::with_capacity(self.samples_per_pixel[0] as usize);
+	    for _ in 0..self.samples_per_pixel[0] {
 		let pixel_direction = (viewport_upper_left + (i as f64 + rng.gen::<f64>()) * inverse_width * viewport_u + (j as f64 + rng.gen::<f64>()) * inverse_height * viewport_v).normalized();
 		let mut ray = Ray::new(self.position, pixel_direction);
 		let mut colour = Colour::new([
@@ -240,7 +245,7 @@ impl Camera {
 		    ColourSample::new(BLUE, 1.0),
 		]);
 		lorentz(&mut ray.direction, &mut colour, self.velocity);
-		total.push(ray_colour(ray, colour, &world, self.max_depth));
+		total.push(ray_colour(ray, colour, &world, self.max_depth, &self.samples_per_pixel[1..]));
 	    }
 	    result.push(torgb(&total))
 	}
@@ -261,13 +266,13 @@ fn main() {
 
     let elements = vec![
 	Primitive::from(SmokeSphere::new(ReflectionSpectrum::Grey(Grey::new(1.0)), 0.3, Point3::new(0.0, 0.0, -1.0), 0.35)),
-//	Primitive::from(Sphere::new(Arc::new(Lambertian::new(ReflectionSpectrum::Grey(Grey::new(0.4)))), Point3::new(0.0, 0.0, -2.0), 0.2)),
+	Primitive::from(Sphere::new(Arc::new(Lambertian::new(ReflectionSpectrum::Grey(Grey::new(0.4)))), Point3::new(0.0, 0.0, -2.0), 0.2)),
 	Primitive::from(Sphere::new(Arc::new(Metal::new(ReflectionSpectrum::Grey(Grey::new(0.85)), 0.05)), Point3::new(1.0, 0.0, -1.0), 0.5)),
 	Primitive::from(Sphere::new(Arc::new(Dielectric::new(1.5)), Point3::new(0.0, 0.0, -1.0), 0.5)),
 	Primitive::from(Sphere::new(Arc::new(Dielectric::new(1.0 / 1.5)), Point3::new(0.0, 0.0, -1.0), 0.35)),
 	Primitive::from(Sphere::new(Arc::new(Lambertian::new(ReflectionSpectrum::Grey(Grey::new(0.5)))), Point3::new(0.0, -100.5, -1.0), 100.0)),
 
-	Primitive::from(Triangle::new(Arc::new(Lambertian::new(ReflectionSpectrum::Grey(Grey::new(0.4)))), [Point3::new(-1.0, 0.0, -2.0), Point3::new(1.0, 0.0, -2.0), Point3::new(0.0, 1.0, -2.5)])),
+	Primitive::from(Triangle::new(Arc::new(Lambertian::new(ReflectionSpectrum::Grey(Grey::new(0.5)))), [Point3::new(-50.0, 1.5, 50.0), Point3::new(0.0, 1.5, -50.0), Point3::new(50.0, 1.5, -50.0)])),
 	
     ];
 

@@ -6,7 +6,9 @@ use crate::colour::*;
 
 pub trait Material: Debug + Send + Sync {
     // self will be contained by record
-    fn reflect(&self, record: &HitRecord) -> Option<(ReflectionSpectrum, Ray)>;
+    // reflectionspectrum does NOT account for attenuation of having multiple rays
+    // maxrays >= 1
+    fn reflect(&self, record: &HitRecord, maxrays: u32) -> Vec<(ReflectionSpectrum, Ray)>;
 }
 
 #[derive(Debug)]
@@ -23,12 +25,36 @@ impl Lambertian {
 }
 
 impl Material for Lambertian {
-    fn reflect(&self, record: &HitRecord) -> Option<(ReflectionSpectrum, Ray)> {
-	let mut direction = record.normal + Vec3::random_unit();
-	if direction.near_zero() {
-	    direction = record.normal;
+    fn reflect(&self, record: &HitRecord, maxrays: u32) -> Vec<(ReflectionSpectrum, Ray)> {
+	let mut result = Vec::with_capacity(maxrays as usize);
+	for _ in 0..maxrays {
+	    let mut direction = record.normal + Vec3::random_unit();
+	    if direction.near_zero() {
+		direction = record.normal;
+	    }
+	    result.push((self.albedo, Ray::new(record.point, direction)));
 	}
-	Some((self.albedo, Ray::new(record.point, direction)))
+	result
+    }
+}
+
+#[derive(Debug)]
+pub struct CleanMetal {
+    albedo: ReflectionSpectrum,
+}
+
+impl CleanMetal {
+    pub fn new(albedo: ReflectionSpectrum) -> Self {
+	CleanMetal {
+	    albedo,
+	}
+    }
+}
+
+impl Material for CleanMetal {
+    fn reflect(&self, record: &HitRecord, _maxrays: u32) -> Vec<(ReflectionSpectrum, Ray)> {
+	let reflected = record.ray.direction.reflect(record.normal);
+	vec![((self.albedo), Ray::new(record.point, reflected))]
     }
 }
 
@@ -42,16 +68,20 @@ impl Metal {
     pub fn new(albedo: ReflectionSpectrum, fuzz: f64) -> Self {
 	Metal {
 	    albedo,
-	    fuzz
+	    fuzz,
 	}
     }
 }
 
 impl Material for Metal {
-    fn reflect(&self, record: &HitRecord) -> Option<(ReflectionSpectrum, Ray)> {
-	let reflected = record.ray.direction.reflect(record.normal);
-	let direction = reflected.normalized() + self.fuzz * Vec3::random_unit();
-	Some((self.albedo, Ray::new(record.point, direction)))
+    fn reflect(&self, record: &HitRecord, maxrays: u32) -> Vec<(ReflectionSpectrum, Ray)> {
+	let mut result = Vec::with_capacity(maxrays as usize);
+	for _ in 0..maxrays {
+	    let reflected = record.ray.direction.reflect(record.normal);
+	    let direction = reflected.normalized() + self.fuzz * Vec3::random_unit();
+	    result.push((self.albedo, Ray::new(record.point, direction)));
+	}
+	result
     }
 }
 
@@ -75,19 +105,33 @@ impl Dielectric {
 }
 
 impl Material for Dielectric {
-    fn reflect(&self, record: &HitRecord) -> Option<(ReflectionSpectrum, Ray)> {
+    fn reflect(&self, record: &HitRecord, maxrays: u32) -> Vec<(ReflectionSpectrum, Ray)> {
 	let rel_refractive_index = if record.backface {self.refractive_index} else {1.0 / self.refractive_index};
 	let unit_direction = record.ray.direction.normalized();
+
+	let reflected = unit_direction.reflect(record.normal);
 	
-	if let Some(direction) = unit_direction.refract(record.normal, rel_refractive_index) {
+	if let Some(refracted) = unit_direction.refract(record.normal, rel_refractive_index) {
 	    let cos = -unit_direction.dot(record.normal);
 	    let probability = Self::reflectance(cos, rel_refractive_index);
-	    if probability <= rand::random() {
-		return Some((ReflectionSpectrum::Grey(Grey::new(1.0)), Ray::new(record.point, direction)));
+	    
+	    if maxrays == 1 {
+		if probability <= rand::random() {
+		    vec![(ReflectionSpectrum::Grey(Grey::new(1.0)), Ray::new(record.point, refracted))]
+		} else {
+		    vec![(ReflectionSpectrum::Grey(Grey::new(1.0)), Ray::new(record.point, reflected))]
+		}
+	    } else {
+		// external their average has to equal 1, so multiply by 2
+		vec![
+		    (ReflectionSpectrum::Grey(Grey::new(2.0 - 2.0 * probability)), Ray::new(record.point, refracted)),
+		    (ReflectionSpectrum::Grey(Grey::new(2.0 * probability)), Ray::new(record.point, reflected)),
+		]
 	    }
+	} else {
+	    // total internal reflection
+	    vec![(ReflectionSpectrum::Grey(Grey::new(1.0)), Ray::new(record.point, reflected))]
 	}
-	let direction = unit_direction.reflect(record.normal);
-	Some((ReflectionSpectrum::Grey(Grey::new(1.0)), Ray::new(record.point, direction)))
     }
 }
 
@@ -105,8 +149,12 @@ impl Isotropic {
 }
 
 impl Material for Isotropic {
-    fn reflect(&self, record: &HitRecord) -> Option<(ReflectionSpectrum, Ray)> {
-	let direction = Vec3::random_unit();
-	Some((self.albedo, Ray::new(record.point, direction)))
+    fn reflect(&self, record: &HitRecord, maxrays: u32) -> Vec<(ReflectionSpectrum, Ray)> {
+	let mut result = Vec::with_capacity(maxrays as usize);
+	for _ in 0..maxrays {
+	    let direction = Vec3::random_unit();
+	    result.push((self.albedo, Ray::new(record.point, direction)));
+	}
+	result
     }
 }
