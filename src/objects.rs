@@ -130,6 +130,8 @@ impl Object for Sphere {
 #[derive(Debug)]
 pub enum PlaneSegType {
     Triangle,
+    Parallelogram,
+    Ellipse,
 }
 
 #[derive(Debug)]
@@ -146,10 +148,7 @@ pub struct PlaneSeg {
 
 impl PlaneSeg {
     // try to maximize angle at point 0
-    pub fn new(material: Arc<dyn Material>, points: [Point3; 3], planesegtype: PlaneSegType) -> PlaneSeg {
-	let origin = points[0];
-	let u = points[1] - origin;
-	let v = points[2] - origin;
+    pub fn new(material: Arc<dyn Material>, origin: Point3, u: Vec3, v: Vec3, planesegtype: PlaneSegType) -> PlaneSeg {
 	let n = u.cross(v);
 	let normal = n.normalized();
 	let height = normal.dot(origin);
@@ -165,6 +164,10 @@ impl PlaneSeg {
 	    material,
 	    planesegtype,
 	}
+    }
+
+    pub fn new_triangle(material: Arc<dyn Material>, points: [Point3; 3]) -> PlaneSeg {
+	Self::new(material, points[0], points[1] - points[0], points[2] - points[0], PlaneSegType::Triangle)
     }
 }
 
@@ -189,6 +192,8 @@ impl Object for PlaneSeg {
 	// avoid lazy evaluation to reduce branches
 	let offside = match self.planesegtype {
 	    PlaneSegType::Triangle => (ufactor < 0.0) | (vfactor < 0.0) | (ufactor + vfactor > 1.0),
+	    PlaneSegType::Parallelogram => (ufactor < 0.0) | (vfactor < 0.0) | (ufactor > 1.0) | (vfactor > 1.0),
+	    PlaneSegTyoe::Ellipse => ufactor.powi(2) + vfactor.powi(2) < 1.0,
 	};
 	if offside {
 	    return None;
@@ -211,6 +216,21 @@ impl Object for PlaneSeg {
 	    PlaneSegType::Triangle => {
 		let mut result = Default::default();
 		for offset in [Default::default(), self.u, self.v] {
+		    result += Boundingbox::from_point(self.origin + offset);
+		}
+		result
+	    },
+	    PlaneSegType::Parallelogram => {
+		let mut result = Default::default();
+		for offset in [Default::default(), self.u, self.v, self.u + self.v] {
+		    result += Boundingbox::from_point(self.origin + offset);
+		}
+		result
+	    },
+	    PlaneSegTyoe::Ellipse => {
+		// a bit larger than necessary: use the rectange
+		let mut result = Default::default();
+		for offset in [-self.u-self.v, self.u-self.v, -self.u+self.v, self.u+self.v] {
 		    result += Boundingbox::from_point(self.origin + offset);
 		}
 		result

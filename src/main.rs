@@ -271,7 +271,7 @@ fn main() {
 	Primitive::from(Sphere::new(Arc::new(Dielectric::new(1.0 / 1.5)), Point3::new(0.0, 0.0, -1.0), 0.35)),
 	//Primitive::from(Sphere::new(Arc::new(Lambertian::new(ReflectionSpectrum::Grey(Grey::new(0.5)))), Point3::new(0.0, -100.5, -1.0), 100.0)),
 
-	Primitive::from(PlaneSeg::new(Arc::new(Lambertian::new(ReflectionSpectrum::Grey(Grey::new(0.5)))), [Point3::new(-50.0, -1.0, 50.0), Point3::new(0.0, -1.0, -50.0), Point3::new(50.0, -1.0, 50.0)], PlaneSegType::Triangle)),
+	Primitive::from(PlaneSeg::new_triangle(Arc::new(Lambertian::new(ReflectionSpectrum::Grey(Grey::new(0.5)))), [Point3::new(-50.0, -1.0, 50.0), Point3::new(0.0, -1.0, -50.0), Point3::new(50.0, -1.0, 50.0)])),
     ];
 
     //let world = Box::new(Group::new());
