@@ -193,7 +193,7 @@ impl Object for PlaneSeg {
 	let offside = match self.planesegtype {
 	    PlaneSegType::Triangle => (ufactor < 0.0) | (vfactor < 0.0) | (ufactor + vfactor > 1.0),
 	    PlaneSegType::Parallelogram => (ufactor < 0.0) | (vfactor < 0.0) | (ufactor > 1.0) | (vfactor > 1.0),
-	    PlaneSegTyoe::Ellipse => ufactor.powi(2) + vfactor.powi(2) < 1.0,
+	    PlaneSegType::Ellipse => ufactor.powi(2) + vfactor.powi(2) < 1.0,
 	};
 	if offside {
 	    return None;
@@ -227,7 +227,7 @@ impl Object for PlaneSeg {
 		}
 		result
 	    },
-	    PlaneSegTyoe::Ellipse => {
+	    PlaneSegType::Ellipse => {
 		// a bit larger than necessary: use the rectange
 		let mut result = Default::default();
 		for offset in [-self.u-self.v, self.u-self.v, -self.u+self.v, self.u+self.v] {
