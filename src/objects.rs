@@ -23,17 +23,17 @@ pub struct Request {
 }
 
 #[derive(Clone, Debug)]
-pub struct HitRecord {
+pub struct HitRecord<'a> {
     pub ray: Ray,
     pub point: Point3,
     pub normal: Vec3,
     pub t: f64,
     pub backface: bool,
-    pub material: Arc<dyn Material>,
+    pub material: &'a dyn Material,
 }
 
-impl HitRecord {
-    pub fn with_ray(point: Point3, mut normal: Vec3, t: f64, ray: Ray, material: Arc<dyn Material>) -> Self {
+impl<'a> HitRecord<'a> {
+    pub fn with_ray(point: Point3, mut normal: Vec3, t: f64, ray: Ray, material: &'a dyn Material) -> Self {
 	let backface = ray.direction.dot(normal) > 0.0;
 	if backface {
 	    normal = -normal
@@ -102,7 +102,7 @@ impl Object for Sphere {
 		    normal: (ray.at(t) - self.center) / self.radius,
 		    t,
 		    backface: false,
-		    material: self.material.clone(),
+		    material: &*self.material,
 		});
 	    }
 	    
@@ -114,7 +114,7 @@ impl Object for Sphere {
 		    normal: -(ray.at(t) - self.center) / self.radius,
 		    t,
 		    backface: true,
-		    material: self.material.clone(),
+		    material: &*self.material,
 		});
 	    }
 	    None
@@ -207,7 +207,7 @@ impl Object for PlaneSeg {
 	    normal: if backface {-self.normal} else {self.normal},
 	    t,
 	    backface,
-	    material: self.material.clone(),
+	    material: &*self.material,
 	})
     }
     
@@ -289,7 +289,7 @@ impl Object for SmokeSphere {
 		    normal: (ray.at(t1) - self.center) / self.radius,
 		    t: collision,
 		    backface: false,
-		    material: self.material.clone(),
+		    material: &*self.material,
 		});
 	    }
 	    None
