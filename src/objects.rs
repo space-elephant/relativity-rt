@@ -60,7 +60,7 @@ pub trait Object {
 #[enum_dispatch(Object)]
 pub enum Primitive {
     Sphere(Sphere),
-    Triangle(Triangle),
+    PlaneSeg(PlaneSeg),
     SmokeSphere(SmokeSphere),
 }
 
@@ -128,36 +128,47 @@ impl Object for Sphere {
 }
 
 #[derive(Debug)]
-pub struct Triangle {
+pub enum PlaneSegType {
+    Triangle,
+}
+
+#[derive(Debug)]
+pub struct PlaneSeg {
     normal: Vec3,
     height: f64,// -D in standard form
     origin: Point3,
+    w: Vec3,
     u: Vec3,
     v: Vec3,
     material: Arc<dyn Material>,
+    planesegtype: PlaneSegType,
 }
 
-impl Triangle {
+impl PlaneSeg {
     // try to maximize angle at point 0
-    pub fn new(material: Arc<dyn Material>, points: [Point3; 3]) -> Triangle {
+    pub fn new(material: Arc<dyn Material>, points: [Point3; 3], planesegtype: PlaneSegType) -> PlaneSeg {
 	let origin = points[0];
 	let u = points[1] - origin;
 	let v = points[2] - origin;
-	let normal = u.cross(v).normalized();
+	let n = u.cross(v);
+	let normal = n.normalized();
 	let height = normal.dot(origin);
+	let w = n / n.length_squared();
 	
-	Triangle {
+	PlaneSeg {
 	    normal,
 	    height,
 	    origin,
+	    w,
 	    u,
 	    v,
 	    material,
+	    planesegtype,
 	}
     }
 }
 
-impl Object for Triangle {
+impl Object for PlaneSeg {
     fn hit(&self, ray: Ray, range: Range) -> Option<HitRecord> {
 	let t = (self.height - self.normal.dot(ray.origin)) / self.normal.dot(ray.direction);
 	if !range.contains(&t) {
@@ -167,14 +178,19 @@ impl Object for Triangle {
 
 	let point = ray.at(t);
 	let offset = point - self.origin;
-	let ufactor = offset.dot(self.u);
-	let vfactor = offset.dot(self.v);
+	assert!(offset.dot(self.normal).abs() < 0.000001);
+	let ufactor = self.w.dot(offset.cross(self.v));
+	let vfactor = self.w.dot(self.u.cross(offset));
 
 	/*if ufactor + vfactor > 1.0 {
 	    println!("{ufactor}, {vfactor}");
 	}*/
 
-	if ufactor < 0.0 || vfactor < 0.0 || ufactor + vfactor > 1.0 {
+	// avoid lazy evaluation to reduce branches
+	let offside = match self.planesegtype {
+	    PlaneSegType::Triangle => (ufactor < 0.0) | (vfactor < 0.0) | (ufactor + vfactor > 1.0),
+	};
+	if offside {
 	    return None;
 	}
 
@@ -191,11 +207,15 @@ impl Object for Triangle {
     }
     
     fn boundingbox(&self) -> Boundingbox {
-	let mut result = Default::default();
-	for offset in [Default::default(), self.u, self.v] {
-	    result += Boundingbox::from_point(self.origin + offset);
+	match self.planesegtype {
+	    PlaneSegType::Triangle => {
+		let mut result = Default::default();
+		for offset in [Default::default(), self.u, self.v] {
+		    result += Boundingbox::from_point(self.origin + offset);
+		}
+		result
+	    },
 	}
-	result
     }
 }
 

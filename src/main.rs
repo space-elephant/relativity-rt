@@ -230,9 +230,9 @@ impl Camera {
 	    let j = pixel / self.image_width;
 	    let i = pixel % self.image_width;
 
-	    /*if i == 0 {
+	    if i == 0 {
 		println!("Progress: {}%", j * 100 / self.image_height);
-	    }*/
+	    }
 
 	    let mut total = Vec::with_capacity(self.samples_per_pixel[0] as usize);
 	    for _ in 0..self.samples_per_pixel[0] {
@@ -261,7 +261,7 @@ fn main() {
 	Primitive::from(Sphere::new(Arc::new(Dielectric::new(1.5)), Point3::new(0.0, 0.0, -1.0), 0.5)),
 	Primitive::from(Sphere::new(Arc::new(Dielectric::new(1.0 / 1.5)), Point3::new(0.0, 0.0, -1.0), 0.45)),
 	Primitive::from(Sphere::new(Arc::new(Lambertian::new(Colour3::new(0.5, 0.5, 0.5))), Point3::new(0.0, -100.5, -1.0), 100.0)),
-    ];*/
+];*/
 
     let elements = vec![
 	Primitive::from(SmokeSphere::new(ReflectionSpectrum::Grey(Grey::new(1.0)), 0.3, Point3::new(0.0, 0.0, -1.0), 0.35)),
@@ -269,28 +269,28 @@ fn main() {
 	Primitive::from(Sphere::new(Arc::new(Metal::new(ReflectionSpectrum::Grey(Grey::new(0.85)), 0.05)), Point3::new(1.0, 0.0, -1.0), 0.5)),
 	Primitive::from(Sphere::new(Arc::new(Dielectric::new(1.5)), Point3::new(0.0, 0.0, -1.0), 0.5)),
 	Primitive::from(Sphere::new(Arc::new(Dielectric::new(1.0 / 1.5)), Point3::new(0.0, 0.0, -1.0), 0.35)),
-	Primitive::from(Sphere::new(Arc::new(Lambertian::new(ReflectionSpectrum::Grey(Grey::new(0.5)))), Point3::new(0.0, -100.5, -1.0), 100.0)),
+	//Primitive::from(Sphere::new(Arc::new(Lambertian::new(ReflectionSpectrum::Grey(Grey::new(0.5)))), Point3::new(0.0, -100.5, -1.0), 100.0)),
 
-	Primitive::from(Triangle::new(Arc::new(Lambertian::new(ReflectionSpectrum::Grey(Grey::new(0.5)))), [Point3::new(-50.0, 1.5, 50.0), Point3::new(0.0, 1.5, -50.0), Point3::new(50.0, 1.5, -50.0)])),
-	
+	Primitive::from(PlaneSeg::new(Arc::new(Lambertian::new(ReflectionSpectrum::Grey(Grey::new(0.5)))), [Point3::new(-50.0, -1.0, 50.0), Point3::new(0.0, -1.0, -50.0), Point3::new(50.0, -1.0, 50.0)], PlaneSegType::Triangle)),
     ];
 
     //let world = Box::new(Group::new());
     let world = Bvh::new(elements);
 
-    let mut camera = Camera::new(Vec3::new(0.0, 0.0, 0.0), Point3::new(-0.5, 1.5, 7.5));
+    let mut camera = Camera::new(Vec3::new(0.0, 0.0, 0.0), Point3::new(-0.5, 1.5, 0.5));
 
     println!("start");
     let mut image = camera.render(&world);
     image.normalize();
-    image.display(Path::new("frame000.ppm"));
+    image.display(Path::new("still000.ppm"));
 
+    /*
     camera.velocity = Vec3::new(0.0, 0.0, -0.5);
     for i in 0..64 {
 	println!("{i} / 64");
 	let mut image = camera.render(&world);
 	image.normalize();
-	image.display(Path::new(&format!("frame{:0>3}.ppm", i + 1)));
+	image.display(Path::new(&format!("v001frame{:0>3}.ppm", i)));
 	camera.step(0.8);
     }
 
@@ -298,6 +298,6 @@ fn main() {
     println!("end");
     let mut image = camera.render(&world);
     image.normalize();
-    image.display(Path::new("frame065.ppm"));
-
+    image.display(Path::new("still002.ppm"));
+    */
 }
