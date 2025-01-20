@@ -159,6 +159,8 @@ impl Spectrum for Sky {
 #[enum_dispatch(Spectrum)]
 pub enum ReflectionSpectrum {
     Grey(Grey),
+    Copper(Copper),
+    Plant(Plant),
 }
 
 #[derive(Copy, Clone, Debug)]
@@ -177,5 +179,53 @@ impl Grey {
 impl Spectrum for Grey {
     fn reflectance(&self, _wavelength: f64) -> f64 {
 	self.brightness
+    }
+}
+
+#[derive(Copy, Clone, Debug)]
+pub struct Copper;
+
+impl Copper {
+    pub fn new() -> Copper {
+	Copper
+    }
+}
+
+impl Spectrum for Copper {
+    fn reflectance(&self, wavelength: f64) -> f64 {
+	if wavelength < 262.5e-9 {
+	    0.3
+	} else if wavelength < 525e-9 {
+	    // 6dB per octave
+	    0.6 / 525e-9 * wavelength
+	} else if wavelength < 660.6105e-9 {
+	    0.6 / 525e-9_f64.powi(2) * wavelength.powi(2)
+	} else {
+	    0.9
+	}
+    }
+}
+
+#[derive(Copy, Clone, Debug)]
+pub struct Plant;
+
+impl Plant {
+    pub fn new() -> Plant {
+	Plant
+    }
+}
+
+impl Spectrum for Plant {
+    fn reflectance(&self, wavelength: f64) -> f64 {
+	let wavelength = wavelength * 1e9;// wavelength in nanometers
+	let squared = wavelength * wavelength;
+	let cubed = squared * wavelength;
+	let fourth = squared * squared;
+	// was modeled as 0 - 100, make sure to adjust exponents before editting
+	(1.0 - (- 4.425573e-9 * fourth
+		+ 9.805887e-6 * cubed
+		- 0.8033462e-2 * squared
+		+ 2.882434 * wavelength
+		- 381.5536)).min(0.9)
     }
 }

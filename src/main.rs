@@ -254,30 +254,36 @@ impl Camera {
 }
 
 fn main() {
-    /*let elements = vec![
-	Primitive::from(SmokeSphere::new(Colour3::new(0.1, 0.1, 0.1), 1.0, Point3::new(-1.0, 0.0, -1.0), 0.5)),
-	Primitive::from(Sphere::new(Arc::new(Lambertian::new(Colour3::new(0.1, 0.5, 0.1))), Point3::new(0.0, 0.0, -2.0), 0.2)),
-	Primitive::from(Sphere::new(Arc::new(Metal::new(Colour3::new(0.73, 0.45, 0.2), 0.05)), Point3::new(1.0, 0.0, -1.0), 0.5)),
-	Primitive::from(Sphere::new(Arc::new(Dielectric::new(1.5)), Point3::new(0.0, 0.0, -1.0), 0.5)),
-	Primitive::from(Sphere::new(Arc::new(Dielectric::new(1.0 / 1.5)), Point3::new(0.0, 0.0, -1.0), 0.45)),
-	Primitive::from(Sphere::new(Arc::new(Lambertian::new(Colour3::new(0.5, 0.5, 0.5))), Point3::new(0.0, -100.5, -1.0), 100.0)),
-];*/
+    //println!("{}, {}, {}", Green.reflectance(RED), Green.reflectance(GREEN), Green.reflectance(BLUE));
+    
+    let concrete = Arc::new(Lambertian::new(ReflectionSpectrum::Grey(Grey::new(0.5))));
+    let green = Arc::new(Lambertian::new(ReflectionSpectrum::Plant(Plane::new())));
 
     let elements = vec![
-	Primitive::from(SmokeSphere::new(ReflectionSpectrum::Grey(Grey::new(1.0)), 0.3, Point3::new(0.0, 0.0, -1.0), 0.35)),
-	Primitive::from(Sphere::new(Arc::new(Lambertian::new(ReflectionSpectrum::Grey(Grey::new(0.4)))), Point3::new(0.0, 0.0, -2.0), 0.2)),
-	Primitive::from(Sphere::new(Arc::new(Metal::new(ReflectionSpectrum::Grey(Grey::new(0.85)), 0.05)), Point3::new(1.0, 0.0, -1.0), 0.5)),
-	Primitive::from(Sphere::new(Arc::new(Dielectric::new(1.5)), Point3::new(0.0, 0.0, -1.0), 0.5)),
-	Primitive::from(Sphere::new(Arc::new(Dielectric::new(1.0 / 1.5)), Point3::new(0.0, 0.0, -1.0), 0.35)),
-	//Primitive::from(Sphere::new(Arc::new(Lambertian::new(ReflectionSpectrum::Grey(Grey::new(0.5)))), Point3::new(0.0, -100.5, -1.0), 100.0)),
+	Primitive::from(SmokeSphere::new(ReflectionSpectrum::Grey(Grey::new(1.0)), 0.3, Point3::new(0.0, 0.5, -1.0), 0.35)),
+	Primitive::from(Sphere::new(Arc::new(Lambertian::new(ReflectionSpectrum::Grey(Grey::new(0.4)))), Point3::new(0.0, 0.5, -2.0), 0.2)),
+//	Primitive::from(Sphere::new(Arc::new(Metal::new(ReflectionSpectrum::Grey(Grey::new(0.85)), 0.05)), Point3::new(1.0, 0.5, -1.0), 0.5)),
+	Primitive::from(Sphere::new(Arc::new(Metal::new(ReflectionSpectrum::Copper(Copper::new()), 0.05)), Point3::new(1.0, 0.5, -1.0), 0.5)),
+	Primitive::from(Sphere::new(Arc::new(Dielectric::new(1.5)), Point3::new(0.0, 0.5, -1.0), 0.5)),
+	Primitive::from(Sphere::new(Arc::new(Dielectric::new(1.0 / 1.5)), Point3::new(0.0, 0.5, -1.0), 0.35)),
 
-	Primitive::from(PlaneSeg::new_triangle(Arc::new(Lambertian::new(ReflectionSpectrum::Grey(Grey::new(0.5)))), [Point3::new(-50.0, -1.0, 50.0), Point3::new(0.0, -1.0, -50.0), Point3::new(50.0, -1.0, 50.0)])),
+	Primitive::from(PlaneSeg::new(concrete.clone(), Point3::new(-10.0, 0.0, -10.0), Vec3::new(0.0, 0.0, 20.0), Vec3::new(20.0, 0.0, 0.0), PlaneSegType::Parallelogram)),
+	
+	Primitive::from(PlaneSeg::new(green.clone(), Point3::new(-1.0, 0.0, -1.0), Vec3::new(-2.0, 0.0, 0.0), Vec3::new(0.0, 4.0, 0.0), PlaneSegType::Parallelogram)),
+	Primitive::from(PlaneSeg::new(green.clone(), Point3::new(-1.0, 0.0, -3.0), Vec3::new(-2.0, 0.0, 0.0), Vec3::new(0.0, 4.0, 0.0), PlaneSegType::Parallelogram)),
+	
+	Primitive::from(PlaneSeg::new(green.clone(), Point3::new(-1.0, 4.0, -1.0), Vec3::new(-2.0, 0.0, 0.0), Vec3::new(0.0, 0.0, -2.0), PlaneSegType::Parallelogram)),
+	
+	Primitive::from(PlaneSeg::new(green.clone(), Point3::new(-1.0, 0.0, -1.0), Vec3::new(0.0, 0.0, -2.0), Vec3::new(0.0, 4.0, 0.0), PlaneSegType::Parallelogram)),
+	Primitive::from(PlaneSeg::new(green.clone(), Point3::new(-3.0, 0.0, -1.0), Vec3::new(0.0, 0.0, -2.0), Vec3::new(0.0, 4.0, 0.0), PlaneSegType::Parallelogram)),
+	
+	//Primitive::from(PlaneSeg::new(Arc::new(Lambertian::new(ReflectionSpectrum::Grey(Grey::new(0.5)))), Point3::new(0.0, -1.0, 0.0), Vec3::new(0.0, 0.0, 10.0), Vec3::new(10.0, 0.0, 0.0), PlaneSegType::Ellipse)),
     ];
 
     //let world = Box::new(Group::new());
     let world = Bvh::new(elements);
 
-    let mut camera = Camera::new(Vec3::new(0.0, 0.0, 0.0), Point3::new(-0.5, 1.5, 0.5));
+    let mut camera = Camera::new(Vec3::new(0.0, 0.0, 0.0), Point3::new(-0.5, 2.0, 3.0));
 
     println!("start");
     let mut image = camera.render(&world);
