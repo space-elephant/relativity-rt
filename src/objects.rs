@@ -56,6 +56,10 @@ pub trait Object {
     fn boundingbox(&self) -> Boundingbox;
 }
 
+pub trait Transform: Object {
+    fn translate(&mut self, offset: Vec3);
+}
+
 #[derive(Debug)]
 #[enum_dispatch(Object)]
 pub enum Primitive {
@@ -124,6 +128,12 @@ impl Object for Sphere {
     fn boundingbox(&self) -> Boundingbox {
 	let shift = Vec3::new(self.radius, self.radius, self.radius);
 	Boundingbox::new(self.center - shift, self.center + shift)
+    }
+}
+
+impl Transform for Sphere {
+    fn translate(&mut self, offset: Vec3) {
+	self.center += offset;
     }
 }
 
@@ -239,6 +249,13 @@ impl Object for PlaneSeg {
     }
 }
 
+impl Transform for PlaneSeg {
+    fn translate(&mut self, offset: Vec3) {
+	self.origin += offset;
+	self.height += self.normal.dot(self.origin);
+    }
+}
+
 #[derive(Debug)]
 pub struct SmokeSphere {
     center: Point3,
@@ -299,5 +316,11 @@ impl Object for SmokeSphere {
     fn boundingbox(&self) -> Boundingbox {
 	let shift = Vec3::new(self.radius, self.radius, self.radius);
 	Boundingbox::new(self.center - shift, self.center + shift)
+    }
+}
+
+impl Transform for SmokeSphere {
+    fn translate(&mut self, offset: Vec3) {
+	self.center += offset;
     }
 }

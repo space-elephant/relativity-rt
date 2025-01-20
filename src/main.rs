@@ -257,7 +257,6 @@ fn main() {
     //println!("{}, {}, {}", Green.reflectance(RED), Green.reflectance(GREEN), Green.reflectance(BLUE));
     
     let concrete = Arc::new(Lambertian::new(ReflectionSpectrum::Grey(Grey::new(0.5))));
-    let green = Arc::new(Lambertian::new(ReflectionSpectrum::Plant(Plane::new())));
 
     let elements = vec![
 	Primitive::from(SmokeSphere::new(ReflectionSpectrum::Grey(Grey::new(1.0)), 0.3, Point3::new(0.0, 0.5, -1.0), 0.35)),
@@ -268,14 +267,13 @@ fn main() {
 	Primitive::from(Sphere::new(Arc::new(Dielectric::new(1.0 / 1.5)), Point3::new(0.0, 0.5, -1.0), 0.35)),
 
 	Primitive::from(PlaneSeg::new(concrete.clone(), Point3::new(-10.0, 0.0, -10.0), Vec3::new(0.0, 0.0, 20.0), Vec3::new(20.0, 0.0, 0.0), PlaneSegType::Parallelogram)),
-	
-	Primitive::from(PlaneSeg::new(green.clone(), Point3::new(-1.0, 0.0, -1.0), Vec3::new(-2.0, 0.0, 0.0), Vec3::new(0.0, 4.0, 0.0), PlaneSegType::Parallelogram)),
-	Primitive::from(PlaneSeg::new(green.clone(), Point3::new(-1.0, 0.0, -3.0), Vec3::new(-2.0, 0.0, 0.0), Vec3::new(0.0, 4.0, 0.0), PlaneSegType::Parallelogram)),
-	
-	Primitive::from(PlaneSeg::new(green.clone(), Point3::new(-1.0, 4.0, -1.0), Vec3::new(-2.0, 0.0, 0.0), Vec3::new(0.0, 0.0, -2.0), PlaneSegType::Parallelogram)),
-	
-	Primitive::from(PlaneSeg::new(green.clone(), Point3::new(-1.0, 0.0, -1.0), Vec3::new(0.0, 0.0, -2.0), Vec3::new(0.0, 4.0, 0.0), PlaneSegType::Parallelogram)),
-	Primitive::from(PlaneSeg::new(green.clone(), Point3::new(-3.0, 0.0, -1.0), Vec3::new(0.0, 0.0, -2.0), Vec3::new(0.0, 4.0, 0.0), PlaneSegType::Parallelogram)),
+
+	// a building
+	Primitive::from(PlaneSeg::new(concrete.clone(), Point3::new(-1.0, 0.0, -1.0), Vec3::new(-2.0, 0.0, 0.0), Vec3::new(0.0, 4.0, 0.0), PlaneSegType::Parallelogram)),
+	Primitive::from(PlaneSeg::new(concrete.clone(), Point3::new(-1.0, 0.0, -3.0), Vec3::new(-2.0, 0.0, 0.0), Vec3::new(0.0, 4.0, 0.0), PlaneSegType::Parallelogram)),
+	Primitive::from(PlaneSeg::new(concrete.clone(), Point3::new(-1.0, 4.0, -1.0), Vec3::new(-2.0, 0.0, 0.0), Vec3::new(0.0, 0.0, -2.0), PlaneSegType::Parallelogram)),
+	Primitive::from(PlaneSeg::new(concrete.clone(), Point3::new(-1.0, 0.0, -1.0), Vec3::new(0.0, 0.0, -2.0), Vec3::new(0.0, 4.0, 0.0), PlaneSegType::Parallelogram)),
+	Primitive::from(PlaneSeg::new(concrete.clone(), Point3::new(-3.0, 0.0, -1.0), Vec3::new(0.0, 0.0, -2.0), Vec3::new(0.0, 4.0, 0.0), PlaneSegType::Parallelogram)),
 	
 	//Primitive::from(PlaneSeg::new(Arc::new(Lambertian::new(ReflectionSpectrum::Grey(Grey::new(0.5)))), Point3::new(0.0, -1.0, 0.0), Vec3::new(0.0, 0.0, 10.0), Vec3::new(10.0, 0.0, 0.0), PlaneSegType::Ellipse)),
     ];
