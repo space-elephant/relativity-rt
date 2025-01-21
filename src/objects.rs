@@ -56,19 +56,26 @@ pub trait Object {
     fn boundingbox(&self) -> Boundingbox;
 }
 
+#[enum_dispatch]
 pub trait Transform: Object {
     fn translate(&mut self, offset: Vec3);
 }
 
-#[derive(Debug)]
-#[enum_dispatch(Object)]
+pub fn translate_many(objects: &mut [impl Transform], offset: Vec3) {
+    for object in objects {
+	object.translate(offset);
+    }
+}
+
+#[derive(Debug, Clone)]
+#[enum_dispatch(Object, Transform)]
 pub enum Primitive {
     Sphere(Sphere),
     PlaneSeg(PlaneSeg),
     SmokeSphere(SmokeSphere),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Sphere {
     center: Point3,
     radius: f64,
@@ -137,14 +144,14 @@ impl Transform for Sphere {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum PlaneSegType {
     Triangle,
     Parallelogram,
     Ellipse,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct PlaneSeg {
     normal: Vec3,
     height: f64,// -D in standard form
@@ -194,10 +201,6 @@ impl Object for PlaneSeg {
 	assert!(offset.dot(self.normal).abs() < 0.000001);
 	let ufactor = self.w.dot(offset.cross(self.v));
 	let vfactor = self.w.dot(self.u.cross(offset));
-
-	/*if ufactor + vfactor > 1.0 {
-	    println!("{ufactor}, {vfactor}");
-	}*/
 
 	// avoid lazy evaluation to reduce branches
 	let offside = match self.planesegtype {
@@ -252,11 +255,11 @@ impl Object for PlaneSeg {
 impl Transform for PlaneSeg {
     fn translate(&mut self, offset: Vec3) {
 	self.origin += offset;
-	self.height += self.normal.dot(self.origin);
+	self.height = self.normal.dot(self.origin);
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct SmokeSphere {
     center: Point3,
     radius: f64,

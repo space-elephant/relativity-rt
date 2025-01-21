@@ -258,25 +258,46 @@ fn main() {
     
     let concrete = Arc::new(Lambertian::new(ReflectionSpectrum::Grey(Grey::new(0.5))));
 
-    let elements = vec![
-	Primitive::from(SmokeSphere::new(ReflectionSpectrum::Grey(Grey::new(1.0)), 0.3, Point3::new(0.0, 0.5, -1.0), 0.35)),
-	Primitive::from(Sphere::new(Arc::new(Lambertian::new(ReflectionSpectrum::Grey(Grey::new(0.4)))), Point3::new(0.0, 0.5, -2.0), 0.2)),
+    let mut elements = vec![
+	Primitive::from(Sphere::new(Arc::new(Lambertian::new(ReflectionSpectrum::Grey(Grey::new(0.2)))), Point3::new(0.0, 0.2, -4.0), 0.2)),
 //	Primitive::from(Sphere::new(Arc::new(Metal::new(ReflectionSpectrum::Grey(Grey::new(0.85)), 0.05)), Point3::new(1.0, 0.5, -1.0), 0.5)),
-	Primitive::from(Sphere::new(Arc::new(Metal::new(ReflectionSpectrum::Copper(Copper::new()), 0.05)), Point3::new(1.0, 0.5, -1.0), 0.5)),
-	Primitive::from(Sphere::new(Arc::new(Dielectric::new(1.5)), Point3::new(0.0, 0.5, -1.0), 0.5)),
-	Primitive::from(Sphere::new(Arc::new(Dielectric::new(1.0 / 1.5)), Point3::new(0.0, 0.5, -1.0), 0.35)),
+	Primitive::from(Sphere::new(Arc::new(Metal::new(ReflectionSpectrum::Copper(Copper::new()), 0.1)), Point3::new(0.0, 1.9, -4.0), 0.5)),
+	Primitive::from(Sphere::new(Arc::new(Dielectric::new(1.5)), Point3::new(0.0, 0.9, -4.0), 0.5)),
+	Primitive::from(Sphere::new(Arc::new(Dielectric::new(1.0 / 1.5)), Point3::new(0.0, 0.9, -4.0), 0.35)),
+	Primitive::from(SmokeSphere::new(ReflectionSpectrum::Grey(Grey::new(0.0)), 0.4, Point3::new(0.0, 0.9, -4.0), 0.35)),
 
-	Primitive::from(PlaneSeg::new(concrete.clone(), Point3::new(-10.0, 0.0, -10.0), Vec3::new(0.0, 0.0, 20.0), Vec3::new(20.0, 0.0, 0.0), PlaneSegType::Parallelogram)),
+	Primitive::from(PlaneSeg::new(Arc::new(Lambertian::new(ReflectionSpectrum::Grey(Grey::new(0.2)))), Point3::new(-10.0, 0.0, -10.0), Vec3::new(0.0, 0.0, 40.0), Vec3::new(20.0, 0.0, 0.0), PlaneSegType::Parallelogram)),
+	
+	//Primitive::from(PlaneSeg::new(Arc::new(Lambertian::new(ReflectionSpectrum::Grey(Grey::new(0.5)))), Point3::new(0.0, -1.0, 0.0), Vec3::new(0.0, 0.0, 10.0), Vec3::new(10.0, 0.0, 0.0), PlaneSegType::Ellipse)),
+    ];
 
+    let mut building1 = vec![
 	// a building
 	Primitive::from(PlaneSeg::new(concrete.clone(), Point3::new(-1.0, 0.0, -1.0), Vec3::new(-2.0, 0.0, 0.0), Vec3::new(0.0, 4.0, 0.0), PlaneSegType::Parallelogram)),
 	Primitive::from(PlaneSeg::new(concrete.clone(), Point3::new(-1.0, 0.0, -3.0), Vec3::new(-2.0, 0.0, 0.0), Vec3::new(0.0, 4.0, 0.0), PlaneSegType::Parallelogram)),
 	Primitive::from(PlaneSeg::new(concrete.clone(), Point3::new(-1.0, 4.0, -1.0), Vec3::new(-2.0, 0.0, 0.0), Vec3::new(0.0, 0.0, -2.0), PlaneSegType::Parallelogram)),
 	Primitive::from(PlaneSeg::new(concrete.clone(), Point3::new(-1.0, 0.0, -1.0), Vec3::new(0.0, 0.0, -2.0), Vec3::new(0.0, 4.0, 0.0), PlaneSegType::Parallelogram)),
 	Primitive::from(PlaneSeg::new(concrete.clone(), Point3::new(-3.0, 0.0, -1.0), Vec3::new(0.0, 0.0, -2.0), Vec3::new(0.0, 4.0, 0.0), PlaneSegType::Parallelogram)),
-	
-	//Primitive::from(PlaneSeg::new(Arc::new(Lambertian::new(ReflectionSpectrum::Grey(Grey::new(0.5)))), Point3::new(0.0, -1.0, 0.0), Vec3::new(0.0, 0.0, 10.0), Vec3::new(10.0, 0.0, 0.0), PlaneSegType::Ellipse)),
     ];
+    let mut building2 = building1.clone();
+    translate_many(&mut building2, Vec3::new(0.0, 0.0, -4.0));
+    let mut building3 = building1.clone();
+    translate_many(&mut building3, Vec3::new(0.0, 0.0, -8.0));
+    
+    let mut building4 = building1.clone();
+    translate_many(&mut building4, Vec3::new(4.0, 0.0, 0.0));
+    let mut building5 = building1.clone();
+    translate_many(&mut building5, Vec3::new(4.0, 0.0, -4.0));
+    let mut building6 = building1.clone();
+    translate_many(&mut building6, Vec3::new(4.0, 0.0, -8.0));
+
+    elements.append(&mut building1);
+    elements.append(&mut building2);
+    elements.append(&mut building3);
+    
+    elements.append(&mut building4);
+    elements.append(&mut building5);
+    elements.append(&mut building6);
 
     //let world = Box::new(Group::new());
     let world = Bvh::new(elements);
