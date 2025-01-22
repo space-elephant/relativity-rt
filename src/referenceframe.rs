@@ -4,7 +4,7 @@ use crate::boundingbox::*;
 use crate::ray::*;
 use std::cmp::Ordering;
 
-use std::mem::{align_of, size_of, transmute, MaybeUninit};
+use std::mem::{transmute, MaybeUninit};
 
 fn choose_axis(objects: &[Primitive]) -> Axis {
     let mut range = Boundingbox::default();
@@ -97,7 +97,7 @@ impl BvhBuilder {
 
     fn sequential_length(&self) -> usize {
 	match self {
-	    BvhBuilder::Primitive(primitive) => 1,
+	    BvhBuilder::Primitive(_primitive) => 1,
 	    BvhBuilder::Split{left, right, ..} => 1 + left.sequential_length() + right.sequential_length(),
 	}
     }
@@ -185,7 +185,7 @@ impl BvhNode {
 
     fn display<'a>(bvh: &'a [Self]) {
 	match &bvh[0] {
-	    Self::Primitive(object) => println!("primitive"),
+	    Self::Primitive(_object) => println!("primitive"),
 	    Self::BvhBranch(branch) => {
 		println!("branch: ");
 		Self::display(&bvh[1..]);

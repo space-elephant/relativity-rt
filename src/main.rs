@@ -4,8 +4,6 @@ use ndarray::{Array2, Axis};
 use std::path::Path;
 use std::fs::File;
 use std::io::Write;
-use std::ffi::OsStr;
-use std::cmp;
 use rand::Rng;
 use std::ops::Add;
 use std::thread;
@@ -37,6 +35,8 @@ use relativity::*;
 
 const XAXIS: Axis = Axis(1);
 const YAXIS: Axis = Axis(0);
+
+const TIMESCALE: f64 = 0.2;
 
 struct Image(Array2<Colour3>);
 
@@ -230,9 +230,9 @@ impl Camera {
 	    let j = pixel / self.image_width;
 	    let i = pixel % self.image_width;
 
-	    if i == 0 {
+	    /*if i == 0 {
 		println!("Progress: {}%", j * 100 / self.image_height);
-	    }
+	    }*/
 
 	    let mut total = Vec::with_capacity(self.samples_per_pixel[0] as usize);
 	    for _ in 0..self.samples_per_pixel[0] {
@@ -243,7 +243,7 @@ impl Camera {
 		    ColourSample::new(GREEN, 1.0),
 		    ColourSample::new(BLUE, 1.0),
 		]);
-		lorentz(&mut ray.direction, &mut colour, self.velocity);
+		lorentz(&mut ray.direction, &mut colour, -self.velocity);
 		total.push(ray_colour(ray, colour, &world, self.max_depth, &self.samples_per_pixel[1..]));
 	    }
 	    result.push(torgb(&total))
@@ -266,7 +266,7 @@ fn main() {
 	Primitive::from(Sphere::new(Arc::new(Dielectric::new(1.0 / 1.5)), Point3::new(0.0, 0.9, -4.0), 0.35)),
 	Primitive::from(SmokeSphere::new(ReflectionSpectrum::Grey(Grey::new(0.0)), 0.4, Point3::new(0.0, 0.9, -4.0), 0.35)),
 
-	Primitive::from(PlaneSeg::new(Arc::new(Lambertian::new(ReflectionSpectrum::Grey(Grey::new(0.2)))), Point3::new(-10.0, 0.0, -10.0), Vec3::new(0.0, 0.0, 40.0), Vec3::new(20.0, 0.0, 0.0), PlaneSegType::Parallelogram)),
+	Primitive::from(PlaneSeg::new(Arc::new(Lambertian::new(ReflectionSpectrum::Grey(Grey::new(0.2)))), Point3::new(-10.0, 0.0, -10.0), Vec3::new(0.0, 0.0, 60.0), Vec3::new(20.0, 0.0, 0.0), PlaneSegType::Parallelogram)),
 	
 	//Primitive::from(PlaneSeg::new(Arc::new(Lambertian::new(ReflectionSpectrum::Grey(Grey::new(0.5)))), Point3::new(0.0, -1.0, 0.0), Vec3::new(0.0, 0.0, 10.0), Vec3::new(10.0, 0.0, 0.0), PlaneSegType::Ellipse)),
     ];
@@ -299,30 +299,59 @@ fn main() {
     elements.append(&mut building5);
     elements.append(&mut building6);
 
-    //let world = Box::new(Group::new());
+    // add ivy trim
+    let mut z = -1.0;
+    while z > -11.0 {
+	for x in [-0.95, 0.95] {
+	    let offset = Vec3::random_unit() * 0.1;
+	    let u = Vec3::random_unit();
+	    let v = Vec3::random_on_hemisphere(u);
+	    elements.push(Primitive::from(PlaneSeg::new(Arc::new(Lambertian::new(ReflectionSpectrum::Plant(Plant::new()))), Point3::new(x, 0.05, z) + offset, u * 0.1, v * 0.1, PlaneSegType::Triangle)));
+	}
+	z -= 0.02;
+    }
+
+
     let world = Bvh::new(elements);
 
-    let mut camera = Camera::new(Vec3::new(0.0, 0.0, 0.0), Point3::new(-0.5, 2.0, 3.0));
+    let mut camera = Camera::new(Vec3::new(0.0, 0.0, 0.0), Point3::new(-0.5, 3.0, 3.0));
+    //let mut camera = Camera::new(Vec3::new(0.0, 0.0, -0.5), Point3::new(-0.5, 3.0, 3.0));
 
     println!("start");
     let mut image = camera.render(&world);
     image.normalize();
     image.display(Path::new("still000.ppm"));
-
-    /*
+    
+    let mut framenum = 0;
+    
     camera.velocity = Vec3::new(0.0, 0.0, -0.5);
-    for i in 0..64 {
-	println!("{i} / 64");
+    while camera.position.z > -3.0 {
+	println!("moving {} at {:?}", framenum, camera.position);
 	let mut image = camera.render(&world);
 	image.normalize();
-	image.display(Path::new(&format!("v001frame{:0>3}.ppm", i)));
-	camera.step(0.8);
+	image.display(Path::new(&format!("vid001frame{:0>3}.ppm", framenum)));
+	camera.step(TIMESCALE);
+	framenum += 1;
     }
 
-    camera.velocity = Vec3::new(0.0, 0.0, 0.0);
-    println!("end");
-    let mut image = camera.render(&world);
-    image.normalize();
-    image.display(Path::new("still002.ppm"));
-    */
+    println!("{:?}", camera.direction);
+
+    while camera.direction.z > camera.direction.x * 2.0 {
+	println!("turning {} at {:?}", framenum, camera.position);
+	let mut image = camera.render(&world);
+	image.normalize();
+	image.display(Path::new(&format!("vid001frame{:0>3}.ppm", framenum)));
+	camera.direction.z -= camera.direction.length() * 0.2 * TIMESCALE;
+	camera.step(TIMESCALE);
+	framenum += 1;
+    }
+    
+    while camera.position.z > -11.0 {
+	println!("moving final {} at {:?}", framenum, camera.position);
+	let mut image = camera.render(&world);
+	image.normalize();
+	image.display(Path::new(&format!("vid001frame{:0>3}.ppm", framenum)));
+	camera.step(TIMESCALE);
+	framenum += 1;
+    }
 }

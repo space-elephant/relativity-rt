@@ -1,5 +1,4 @@
 use crate::{Ray, Point3, Vec3};
-use std::cmp::{min, max};
 use std::ops::*;
 
 #[derive(Debug, Clone, Copy)]

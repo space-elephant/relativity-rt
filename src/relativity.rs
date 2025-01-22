@@ -13,17 +13,17 @@ pub fn lorentz(direction: &mut Vec3, colour: &mut Colour, v: Vec3) {
     let gamma = 1.0 / (1.0 - v.length_squared());
     //println!("gamma = {gamma}");
     let xv = direction.dot(v);
-    let timedialation = gamma * (1.0 + xv);
+    let invtimedialation = 1.0 / (gamma * (1.0 + xv));
     //println!("time dialation: {}", timedialation);
 
     let x = xv * v / v.length_squared();
 
     // replace motion in x with gamma(x+v)
     *direction += gamma * (x + v) - x;
-    *direction /= timedialation;
+    *direction *= invtimedialation;
 
     // wavelength, so time dialation means increasing the wavelength
     //println!("colour fr {:?} muliply by {}", colour, timedialation);
-    colour.mul_wavelength(timedialation);
+    colour.mul_wavelength(invtimedialation);
     //println!("colour to {:?}", colour);
 }
