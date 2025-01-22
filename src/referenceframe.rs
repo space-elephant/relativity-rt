@@ -3,8 +3,9 @@ use crate::objects::*;
 use crate::boundingbox::*;
 use crate::ray::*;
 use std::cmp::Ordering;
-
 use std::mem::{transmute, MaybeUninit};
+
+const BUCKETS: usize = 8;
 
 fn choose_axis(objects: &[Primitive]) -> Axis {
     let mut range = Boundingbox::default();
@@ -20,7 +21,7 @@ fn choose_axis(objects: &[Primitive]) -> Axis {
     }
 }
 
-fn choose_center(objects: &[Primitive], axis: Axis) -> f64 {
+fn choose_center_middle(objects: &[Primitive], axis: Axis) -> f64 {
     let mut min = f64::INFINITY;
     let mut max = -f64::INFINITY;
 
@@ -36,6 +37,50 @@ fn choose_center(objects: &[Primitive], axis: Axis) -> f64 {
     }
 
     return (min + max) * 0.5;
+}
+
+fn choose_center_sah(objects: &[Primitive], axis: Axis) -> f64 {
+    let mut min = f64::INFINITY;
+    let mut max = -f64::INFINITY;
+
+    for object in objects {
+	let value = object.boundingbox().centeroid()[axis];
+
+	if value < min {
+	    min = value;
+	}
+	if value > max {
+	    max = value;
+	}
+    }
+    let bucketsize = (max - min) / BUCKETS as f64;
+
+    let mut surfaceareas: [f64; BUCKETS] = [0.0; BUCKETS];
+
+    for object in objects {
+	// clamp for when it exactly hits the border
+	let bucket = (((object.boundingbox().centeroid()[axis] - min) / bucketsize) as usize).min(BUCKETS-1);
+	surfaceareas[bucket] += object.surfacearea();
+    }
+
+    // now choose whichever cutoff is the closest to even (lowest magnitude of error)
+    // error is half of (the surface areas of objects on the right minus those on the left)
+    let mut error: f64 = surfaceareas.iter().sum::<f64>() * 0.5;
+    for bucket in 1..BUCKETS {
+	let prev = error;
+	error -= surfaceareas[bucket-1];
+	if error <= 0.0 {
+	    // if going further will make it worse
+	    let bucket = if error < -prev && bucket != 1 {
+		bucket - 1
+	    } else {
+		bucket
+	    };
+	    return min + bucket as f64 * bucketsize
+	}
+    }
+    // if we get this far, the majority of objects are in the final bucket, so we isolate only them
+    min + (BUCKETS - 1) as f64 * bucketsize
 }
 
 // consists of at least one primitive
@@ -59,7 +104,7 @@ impl BvhBuilder {
 	    },
 	    Err(objects) => {
 		let axis = choose_axis(&objects);
-		let center = choose_center(&objects, axis);
+		let center = choose_center_middle(&objects, axis);
 
 		let mut left_objects = Vec::with_capacity(objects.len());
 		let mut right_objects = Vec::with_capacity(objects.len());
@@ -157,6 +202,10 @@ impl Object for Bvh {
     fn boundingbox(&self) -> Boundingbox {
 	self.0[0].boundingbox()
     }
+
+    fn surfacearea(&self) -> f64 {
+	BvhNode::surfacearea(&*self.0)
+    }
 }
 
 impl Bvh {
@@ -195,6 +244,18 @@ impl BvhNode {
 		};
 		Self::display(rightchild);
 		println!("end");
+	    },
+	}
+    }
+
+    fn surfacearea<'a>(bvh: &'a [Self]) -> f64 {
+	match &bvh[0] {
+	    Self::Primitive(object) => object.surfacearea(),
+	    Self::BvhBranch(branch) => {
+		let rightchild = unsafe {
+		    transmute::<*const [BvhNode], &'a [BvhNode]>(branch.rightchild)
+		};
+		Self::surfacearea(&bvh[1..]) + Self::surfacearea(rightchild)
 	    },
 	}
     }

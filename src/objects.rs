@@ -5,6 +5,7 @@ use crate::boundingbox::*;
 use crate::colour::*;
 use enum_dispatch::enum_dispatch;
 use std::sync::Arc;
+use std::f64::consts::PI;
 
 pub type Range = std::ops::Range<f64>;
 
@@ -54,6 +55,7 @@ pub trait Object {
     // target will be None initialized, may add to any parts but must attenuate apropriately
     fn hit(&self, ray: Ray, range: Range) -> Option<HitRecord>;
     fn boundingbox(&self) -> Boundingbox;
+    fn surfacearea(&self) -> f64;
 }
 
 #[enum_dispatch]
@@ -135,6 +137,10 @@ impl Object for Sphere {
     fn boundingbox(&self) -> Boundingbox {
 	let shift = Vec3::new(self.radius, self.radius, self.radius);
 	Boundingbox::new(self.center - shift, self.center + shift)
+    }
+
+    fn surfacearea(&self) -> f64 {
+	2.0 * PI * self.radius.powi(2)
     }
 }
 
@@ -252,6 +258,15 @@ impl Object for PlaneSeg {
 	    },
 	}
     }
+
+    // represents the surface of only one side
+    fn surfacearea(&self) -> f64 {
+	match self.planesegtype {
+	    PlaneSegType::Triangle => self.u.cross(self.v).length() * 0.5,
+	    PlaneSegType::Parallelogram => self.u.cross(self.v).length(),
+	    PlaneSegType::Ellipse => self.u.cross(self.v).length() * PI,
+	}
+    }
 }
 
 impl Transform for PlaneSeg {
@@ -321,6 +336,11 @@ impl Object for SmokeSphere {
     fn boundingbox(&self) -> Boundingbox {
 	let shift = Vec3::new(self.radius, self.radius, self.radius);
 	Boundingbox::new(self.center - shift, self.center + shift)
+    }
+
+    fn surfacearea(&self) -> f64 {
+	// still take the surface of the shell
+	2.0 * PI * self.radius.powi(2)
     }
 }
 
