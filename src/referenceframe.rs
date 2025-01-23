@@ -104,7 +104,7 @@ impl BvhBuilder {
 	    },
 	    Err(objects) => {
 		let axis = choose_axis(&objects);
-		let center = choose_center_middle(&objects, axis);
+		let center = choose_center_sah(&objects, axis);
 
 		let mut left_objects = Vec::with_capacity(objects.len());
 		let mut right_objects = Vec::with_capacity(objects.len());

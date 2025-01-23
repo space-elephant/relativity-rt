@@ -308,7 +308,7 @@ fn main() {
 	    let v = Vec3::random_on_hemisphere(u);
 	    elements.push(Primitive::from(PlaneSeg::new(Arc::new(Lambertian::new(ReflectionSpectrum::Plant(Plant::new()))), Point3::new(x, 0.05, z) + offset, u * 0.1, v * 0.1, PlaneSegType::Triangle)));
 	}
-	z -= 0.02;
+	z -= 0.05;
     }
 
 
@@ -354,4 +354,6 @@ fn main() {
 	camera.step(TIMESCALE);
 	framenum += 1;
     }
+
+    println!("done");
 }

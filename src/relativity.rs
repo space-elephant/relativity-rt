@@ -7,7 +7,7 @@ use crate::colour::*;
 pub fn lorentz(direction: &mut Vec3, colour: &mut Colour, v: Vec3) {
     if v.length_squared() < 1e-12 {
 	// not moving at relativistic speed anyway, avoid division by zero
-	return
+	return;
     }
     
     let gamma = 1.0 / (1.0 - v.length_squared());

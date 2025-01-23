@@ -204,9 +204,6 @@ impl Object for PlaneSeg {
 
 	let point = ray.at(t);
 	let offset = point - self.origin;
-	if offset.dot(self.normal).abs() >= 0.0001 {
-	    panic!("{} nonnegligable\n{} = {}\nPlane intercept not on the plane: {:?}", offset.dot(self.normal), self.height, self.normal.dot(self.origin), self);
-	}
 	let ufactor = self.w.dot(offset.cross(self.v));
 	let vfactor = self.w.dot(self.u.cross(offset));
 
