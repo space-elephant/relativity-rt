@@ -1,23 +1,21 @@
 use enum_dispatch::enum_dispatch;
 use crate::vec3::*;
 
+// incandescance constaints
 const KB: f64 = 1.380649e-23;// J/K
 const H: f64 = 6.62607015e-34;// J/Hz
 const C: f64 = 299792458.0;// m/s
 
+// current camera takes only these wavelengths
 pub const RED: f64 = 640e-9;
 pub const GREEN: f64 = 545e-9;
 pub const BLUE: f64 = 450e-9;
 
-pub const WARNING: Colour = Colour([
-    ColourSample{wavelength: RED, intensity: 1.0},
-    ColourSample{wavelength: GREEN, intensity: 0.0},
-    ColourSample{wavelength: BLUE, intensity: 1.0},
-]);
-
+// the colour of one ray, a series of a number of samples (in this case 3)
 #[derive(Clone, Copy, Debug)]
 pub struct Colour([ColourSample; 3]);
 
+// the empty colour, with no intensity so wavelength doesn't matter
 impl Default for Colour {
     fn default() -> Colour {
 	Colour([ColourSample{wavelength: 0.0, intensity: 0.0}; 3])
@@ -32,6 +30,7 @@ impl Colour {
 	}
     }
 
+    // utility functions to build and edit
     pub fn new(samples: [ColourSample; 3]) -> Colour {
 	Colour(samples)
     }
@@ -58,12 +57,14 @@ impl Colour {
     }
 }
 
+// generate a Colour3 (a Vec3, as in rtweekend) from a number of samples of colours
 pub fn torgb(blocks: &[Colour]) -> Colour3 {
     // results in unnatural camera response curve; can be improved
     let mut result = Colour3::default();
     for block in blocks {
 	for sample in block.0 {
 	    match sample.wavelength {
+		// three frequencies only
 		RED => result.x += sample.intensity,
 		GREEN => result.y += sample.intensity,
 		BLUE => result.z += sample.intensity,
@@ -74,6 +75,7 @@ pub fn torgb(blocks: &[Colour]) -> Colour3 {
     result / (blocks.len() as f64)
 }
 
+// pure struct for each sample
 #[derive(Clone, Copy, Debug)]
 pub struct ColourSample {
     wavelength: f64,// in meters
@@ -89,19 +91,21 @@ impl ColourSample {
     }
 }
 
+// used for both emmision spectra and reflection spectra
+// reflection spectra usually have reflectances no more than 1
+// but see dielectric refraction
 #[enum_dispatch]
 pub trait Spectrum {
     fn reflectance(&self, wavelength: f64) -> f64;
     fn attenuate(&self, mut colour: Colour) -> Colour {
-	//println!("takes {:?}", colour);
 	for sample in &mut colour.0 {
 	    sample.intensity *= self.reflectance(sample.wavelength);
 	}
-	//println!(" to get {:?}", colour);
 	colour
     }
 }
 
+// having seperate tagged unions allows them to be smaller, since incandescant spectra of reflection makes no sense
 #[derive(Copy, Clone, Debug)]
 #[enum_dispatch(Spectrum)]
 pub enum EmmisionSpectrum {
@@ -109,6 +113,7 @@ pub enum EmmisionSpectrum {
     Sky(Sky),
 }
 
+// "warmer" colours have lower temperature when incandescing
 #[derive(Copy, Clone, Debug)]
 pub struct Incandescant {
     temperature: f64,// in kelvins
@@ -124,6 +129,7 @@ impl Incandescant {
     }
 }
 
+// all values use SI units (even c, which is 1 elsewhere)
 impl Spectrum for Incandescant {
     fn reflectance(&self, wavelength: f64) -> f64 {
 	let f = C / wavelength;
@@ -132,6 +138,7 @@ impl Spectrum for Incandescant {
     }
 }
 
+// not used in the current version: based on rtweekend
 #[derive(Copy, Clone, Debug)]
 pub struct Sky {
     wavelength_3db: f64,
@@ -145,6 +152,7 @@ impl Sky {
     }
 }
 
+// filter, this one's just meant to look interesting, mainly for debugging
 impl Spectrum for Sky {
     fn reflectance(&self, wavelength: f64) -> f64 {
 	if wavelength > self.wavelength_3db {
@@ -155,6 +163,8 @@ impl Spectrum for Sky {
     }
 }
 
+// most objects are white/grey in the visible range, but absorb signifigant amounts of UV light
+// this includes plants, so really only the copper is actually correct
 #[derive(Copy, Clone, Debug)]
 #[enum_dispatch(Spectrum)]
 pub enum ReflectionSpectrum {
@@ -163,6 +173,7 @@ pub enum ReflectionSpectrum {
     Plant(Plant),
 }
 
+// simplest possible spectrum, designed as a placeholder
 #[derive(Copy, Clone, Debug)]
 pub struct Grey {
     brightness: f64,
@@ -182,6 +193,8 @@ impl Spectrum for Grey {
     }
 }
 
+// a filter, steeper right near the 3dB point
+// long wavelengths are less attenuated
 #[derive(Copy, Clone, Debug)]
 pub struct Copper;
 
@@ -196,9 +209,10 @@ impl Spectrum for Copper {
 	if wavelength < 262.5e-9 {
 	    0.3
 	} else if wavelength < 525e-9 {
-	    // 6dB per octave
+	    // 3dB per octave
 	    0.6 / 525e-9 * wavelength
 	} else if wavelength < 660.6105e-9 {
+	    // 6dB per octave
 	    0.6 / 525e-9_f64.powi(2) * wavelength.powi(2)
 	} else {
 	    0.9
@@ -206,6 +220,9 @@ impl Spectrum for Copper {
     }
 }
 
+// based on the reflection spectrum of chlorophyll
+// actualy plants will look darker in ultraviolet
+// uses a quartic polynomial, generated externally
 #[derive(Copy, Clone, Debug)]
 pub struct Plant;
 

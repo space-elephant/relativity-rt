@@ -8,6 +8,7 @@ pub enum Axis {
     Z,
 }
 
+// vector representing direction and length, where length can be any float
 #[derive(Clone, Copy, Debug)]
 pub struct Vec3 {
     pub x: f64,
@@ -22,6 +23,7 @@ impl Default for Vec3 {
 }
 
 impl Vec3 {
+    // some functions copied from https://raytracing.github.io/books/RayTracingInOneWeekend.html
     pub fn grey(value: f64) -> Self {
 	Colour3::new(value, value, value)
     }
@@ -59,7 +61,7 @@ impl Vec3 {
 	self - 2.0 * self.dot(normal) * normal
     }
 
-    // unlike reflect, takes normalized vector
+    // unlike reflect, takes normalized vector for self
     pub fn refract(self, normal: Self, rel_refractive_index: f64) -> Option<Self> {
 	let cos = (-self.dot(normal)).min(1.0);
 	let sinsq = 1.0 - cos*cos;
@@ -109,6 +111,7 @@ impl Vec3 {
 	self.x.abs() < S && self.y.abs() < S && self.z.abs() < S
     }
 
+    // find the greatest component, mainly used for exposure adjustment
     pub fn max_component(self) -> f64 {
 	let xy = if self.x > self.y {self.x} else {self.y};
 	if xy > self.z {xy} else {self.z}
@@ -125,6 +128,7 @@ fn linear_add_gamma(value: f64) -> f64 {
     }
 }
 
+// implementing numeric traits, again from ray tracing in one weekend
 impl Neg for Vec3 {
     type Output = Self;
 
@@ -197,6 +201,7 @@ impl DivAssign<f64> for Vec3 {
     }
 }
 
+// allows the Axis enum to be used to choose an axis
 impl Index<Axis> for Vec3 {
     type Output = f64;
 
@@ -219,5 +224,6 @@ impl IndexMut<Axis> for Vec3 {
     }
 }
 
+// type aliases
 pub type Point3 = Vec3;
 pub type Colour3 = Vec3;

@@ -11,6 +11,7 @@ pub trait Material: Debug + Send + Sync {
     fn reflect(&self, record: &HitRecord, maxrays: u32) -> Vec<(ReflectionSpectrum, Ray)>;
 }
 
+// lambertian from rtweekend
 #[derive(Debug)]
 pub struct Lambertian {
     albedo: ReflectionSpectrum,
@@ -24,6 +25,7 @@ impl Lambertian {
     }
 }
 
+// randomly generate reflected rays, so use as many as possible
 impl Material for Lambertian {
     fn reflect(&self, record: &HitRecord, maxrays: u32) -> Vec<(ReflectionSpectrum, Ray)> {
 	let mut result = Vec::with_capacity(maxrays as usize);
@@ -38,6 +40,7 @@ impl Material for Lambertian {
     }
 }
 
+// for polished metal, with no randomness
 #[derive(Debug)]
 pub struct CleanMetal {
     albedo: ReflectionSpectrum,
@@ -51,6 +54,7 @@ impl CleanMetal {
     }
 }
 
+// since there is no randomness, always provide a single reflected ray
 impl Material for CleanMetal {
     fn reflect(&self, record: &HitRecord, _maxrays: u32) -> Vec<(ReflectionSpectrum, Ray)> {
 	let reflected = record.ray.direction.reflect(record.normal);
@@ -58,6 +62,8 @@ impl Material for CleanMetal {
     }
 }
 
+// the metal as shown in ray tracing in one weekend
+// fuzz is less than unit length or rays can be projected back into the object
 #[derive(Debug)]
 pub struct Metal {
     albedo: ReflectionSpectrum,
@@ -73,6 +79,7 @@ impl Metal {
     }
 }
 
+// this one uses the maximum number of rays, since it is fuzzy
 impl Material for Metal {
     fn reflect(&self, record: &HitRecord, maxrays: u32) -> Vec<(ReflectionSpectrum, Ray)> {
 	let mut result = Vec::with_capacity(maxrays as usize);
@@ -85,6 +92,8 @@ impl Material for Metal {
     }
 }
 
+// a perfect dielectric, does not represent glass
+// glass would absorb most of the light in the UV and infrared
 #[derive(Debug)]
 pub struct Dielectric {
     refractive_index: f64,
@@ -97,6 +106,7 @@ impl Dielectric {
 	}
     }
 
+    // from rtweekend
     fn reflectance(cos: f64, refractive_index: f64) -> f64 {
 	let r0 = (1.0 - refractive_index) / (1.0 + refractive_index);
 	let r0 = r0*r0;
@@ -105,6 +115,8 @@ impl Dielectric {
 }
 
 impl Material for Dielectric {
+    // reflect or refract as given by ray tracing in one weekend
+    // but in some cases we can generate both rays at once
     fn reflect(&self, record: &HitRecord, maxrays: u32) -> Vec<(ReflectionSpectrum, Ray)> {
 	let rel_refractive_index = if record.backface {self.refractive_index} else {1.0 / self.refractive_index};
 	let unit_direction = record.ray.direction.normalized();
@@ -135,6 +147,7 @@ impl Material for Dielectric {
     }
 }
 
+// isotropic material, used only for SmokeSphere
 #[derive(Debug)]
 pub struct Isotropic {
     albedo: ReflectionSpectrum,
@@ -148,6 +161,7 @@ impl Isotropic {
     }
 }
 
+// generate rays in completely random directions, as many as possible
 impl Material for Isotropic {
     fn reflect(&self, record: &HitRecord, maxrays: u32) -> Vec<(ReflectionSpectrum, Ray)> {
 	let mut result = Vec::with_capacity(maxrays as usize);

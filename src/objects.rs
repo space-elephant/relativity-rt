@@ -7,22 +7,19 @@ use enum_dispatch::enum_dispatch;
 use std::sync::Arc;
 use std::f64::consts::PI;
 
+// use the native rust type Range as an interval
 pub type Range = std::ops::Range<f64>;
 
-pub fn in_range(t: f64, range: Range) -> Option<f64> {
-    if range.contains(&t) {
-	Some(t)
-    } else {
-	None
-    }
-}
-
+// request, stored on my custom stack
+// contains the ray to be sent, as well as the attenuation and TTL (depth is actually backwards)
 pub struct Request {
     pub ray: Ray,
     pub colour: Colour,
     pub depth: u32,
 }
 
+// the struct, from ray tracing in one weekend, about reporting what happened to a ray that has already hit
+// the material reference counter does not count another reference; that is held by the object still
 #[derive(Clone, Debug)]
 pub struct HitRecord<'a> {
     pub ray: Ray,
@@ -33,6 +30,7 @@ pub struct HitRecord<'a> {
     pub material: &'a dyn Material,
 }
 
+// ensure the normal is always pointing outwards. It will already be normalized
 impl<'a> HitRecord<'a> {
     pub fn with_ray(point: Point3, mut normal: Vec3, t: f64, ray: Ray, material: &'a dyn Material) -> Self {
 	let backface = ray.direction.dot(normal) > 0.0;
@@ -50,14 +48,15 @@ impl<'a> HitRecord<'a> {
     }
 }
 
+// Object is the "hittable" from rtweekend. Provides surface area for bvh construction
 #[enum_dispatch]
 pub trait Object {
-    // target will be None initialized, may add to any parts but must attenuate apropriately
     fn hit(&self, ray: Ray, range: Range) -> Option<HitRecord>;
     fn boundingbox(&self) -> Boundingbox;
     fn surfacearea(&self) -> f64;
 }
 
+// bvh can't do this, but primitives can: translate (as used for buildings in the example scene)
 #[enum_dispatch]
 pub trait Transform: Object {
     fn translate(&mut self, offset: Vec3);
@@ -69,6 +68,7 @@ pub fn translate_many(objects: &mut [impl Transform], offset: Vec3) {
     }
 }
 
+// rust enums are tagged unions. This one stores different types of primitives as a faster alternative to vtables (also, rust's dynamic dispatch requires that the objects are stored elsewhere, such as the heap)
 #[derive(Debug, Clone)]
 #[enum_dispatch(Object, Transform)]
 pub enum Primitive {
@@ -77,6 +77,7 @@ pub enum Primitive {
     SmokeSphere(SmokeSphere),
 }
 
+// the simplest and first object, only for solid material (sphere, not a ball)
 #[derive(Debug, Clone)]
 pub struct Sphere {
     center: Point3,
@@ -95,6 +96,7 @@ impl Sphere {
 }
 
 impl Object for Sphere {
+    // from ray tracing in one weekend, uses the quadratic formula, trying the exit intercept if the entry fails
     fn hit(&self, ray: Ray, range: Range) -> Option<HitRecord> {
 	let offset = ray.origin - self.center;
 	let a = ray.direction.length_squared();
@@ -133,23 +135,27 @@ impl Object for Sphere {
 	    None
 	}
     }
-    
+
+    // creates axis aligned bounding box, for bvh
     fn boundingbox(&self) -> Boundingbox {
 	let shift = Vec3::new(self.radius, self.radius, self.radius);
 	Boundingbox::new(self.center - shift, self.center + shift)
     }
 
+    // standard formula
     fn surfacearea(&self) -> f64 {
-	2.0 * PI * self.radius.powi(2)
+	4.0 * PI * self.radius.powi(2)
     }
 }
 
+// based around one point, so just shift that
 impl Transform for Sphere {
     fn translate(&mut self, offset: Vec3) {
 	self.center += offset;
     }
 }
 
+// plane segments of any kind that can be generated with two vectors and an origin
 #[derive(Debug, Clone)]
 pub enum PlaneSegType {
     Triangle,
@@ -170,7 +176,7 @@ pub struct PlaneSeg {
 }
 
 impl PlaneSeg {
-    // try to maximize angle at point 0
+    // generate with only what is given
     pub fn new(material: Arc<dyn Material>, origin: Point3, u: Vec3, v: Vec3, planesegtype: PlaneSegType) -> PlaneSeg {
 	let n = u.cross(v);
 	let normal = n.normalized();
@@ -189,12 +195,14 @@ impl PlaneSeg {
 	}
     }
 
+    // make a triangle from a list of points, for conveniance
     pub fn new_triangle(material: Arc<dyn Material>, points: [Point3; 3]) -> PlaneSeg {
 	Self::new(material, points[0], points[1] - points[0], points[2] - points[0], PlaneSegType::Triangle)
     }
 }
 
 impl Object for PlaneSeg {
+    // the hit function, adapted from ray tracing the next week
     fn hit(&self, ray: Ray, range: Range) -> Option<HitRecord> {
 	let t = (self.height - self.normal.dot(ray.origin)) / self.normal.dot(ray.direction);
 	if !range.contains(&t) {
@@ -202,6 +210,7 @@ impl Object for PlaneSeg {
 	    return None;
 	}
 
+	// we hit the plane, so determine if we hit the plane segment
 	let point = ray.at(t);
 	let offset = point - self.origin;
 	let ufactor = self.w.dot(offset.cross(self.v));
@@ -217,7 +226,7 @@ impl Object for PlaneSeg {
 	    return None;
 	}
 
-	// should be negative
+	// dot product should be negative
 	let backface = self.normal.dot(ray.direction) > 0.0;
 	Some(HitRecord {
 	    ray,
@@ -228,7 +237,8 @@ impl Object for PlaneSeg {
 	    material: &*self.material,
 	})
     }
-    
+
+    // find the endpoints (if a polygon) and take the aabb that combines them all
     fn boundingbox(&self) -> Boundingbox {
 	match self.planesegtype {
 	    PlaneSegType::Triangle => {
@@ -266,6 +276,7 @@ impl Object for PlaneSeg {
     }
 }
 
+// some redundant data, but the plane will be parallel
 impl Transform for PlaneSeg {
     fn translate(&mut self, offset: Vec3) {
 	self.origin += offset;
@@ -273,6 +284,7 @@ impl Transform for PlaneSeg {
     }
 }
 
+// this one is an actual ball, need to ensure collision is before the exit point
 #[derive(Debug, Clone)]
 pub struct SmokeSphere {
     center: Point3,
@@ -293,6 +305,7 @@ impl SmokeSphere {
 }
 
 impl Object for SmokeSphere {
+    // randomly generate a distance, and then check if in range
     fn hit(&self, ray: Ray, range: Range) -> Option<HitRecord> {
 	let offset = ray.origin - self.center;
 	let a = ray.direction.length_squared();
@@ -302,9 +315,8 @@ impl Object for SmokeSphere {
 	if discriminant < 0.0 {
 	    None
 	} else {
-	    // least intersection is the important one
 	    let factor = discriminant.sqrt();
-	    
+
 	    let mut t1 = (-h - factor) / a;
 	    if t1 >= range.end {
 		return None;
@@ -314,7 +326,8 @@ impl Object for SmokeSphere {
 	    }
 
 	    let collision = t1 + self.neg_inv_density * rand::random::<f64>().log10();
-	    
+
+	    // the material will create the direction, but the position is done here
 	    let t2 = (-h + factor) / a;
 	    if collision <= t2 && range.contains(&collision) {
 		return Some(HitRecord {
@@ -337,7 +350,7 @@ impl Object for SmokeSphere {
 
     fn surfacearea(&self) -> f64 {
 	// still take the surface of the shell
-	2.0 * PI * self.radius.powi(2)
+	4.0 * PI * self.radius.powi(2)
     }
 }
 

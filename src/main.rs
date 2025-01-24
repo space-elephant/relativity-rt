@@ -38,16 +38,20 @@ const YAXIS: Axis = Axis(0);
 
 const TIMESCALE: f64 = 0.2;
 
+// an array of floats representing an image
 struct Image(Array2<Colour3>);
 
 impl Image {
+    // convert floats to chars and then write them to a file
     fn display(&self, filename: &Path) {
+	// make the header
 	let mut result = vec![b'P', b'6', b'\n'];
 	result.extend_from_slice(self.0.len_of(XAXIS).to_string().as_bytes());
 	result.push(b' ');
 	result.extend_from_slice(self.0.len_of(YAXIS).to_string().as_bytes());
 	result.extend_from_slice(b"\n255\n");
-	
+
+	// convert each pixel to u8 and write out
 	for colour in self.0.iter() {
 	    let colour = colour.add_gamma();
 	    for value in [colour.x, colour.y, colour.z] {
@@ -58,8 +62,8 @@ impl Image {
 	file.write_all(&result).unwrap();
     }
 
+    // adjust automatic exposure, ensuring all values are in the range [0, 1]
     fn normalize(&mut self) {
-	// ensure all values are in the range [0, 1]
 	// Welford's algorithm from
 	// https://en.wikipedia.org/wiki/Algorithms_for_calculating_variance
 	let mut count: f64 = 0.0;
@@ -77,9 +81,10 @@ impl Image {
 
 	let stdev = (m2 / count).sqrt();
 
-	// adjust exposure
+	// max is mu + 1.5 sigma
 	let adjust = 1.0 / (mean + 1.5 * stdev);
-	
+
+	// adjust, but if any channel goes over 1.0 then reduce all of the values
 	for colour in self.0.iter_mut() {
 	    *colour *= adjust;
 	    if colour.max_component() > 1.0 {
@@ -89,15 +94,17 @@ impl Image {
     }
 }
 
+// fires a ray through a scene, branching as necessary
+// the last entry in maxraystable is all later values; for performance, use 1
 fn ray_colour(ray: Ray, colour: Colour, world: &Bvh, maxdepth: u32, maxraystable: &[u32]) -> Colour {
-    //println!("start with {:?}", colour);
     let mut result = Colour::new([
 	// wavelengths should be ideally randomized
 	ColourSample::new(RED, 0.0),
 	ColourSample::new(GREEN, 0.0),
 	ColourSample::new(BLUE, 0.0),
     ]);
-    
+
+    // don't duplicate the entire call stack, just the Request
     let mut stack = Vec::with_capacity(256);
     stack.push(Request {
 	ray,
@@ -110,14 +117,17 @@ fn ray_colour(ray: Ray, colour: Colour, world: &Bvh, maxdepth: u32, maxraystable
 	    // assume it's just black
 	} else {
 	    if let Some(record) = world.hit(ray, 0.001..f64::INFINITY) {
+		// we hit the world, find the reflection rays
 		let maxrays = maxraystable[(depth as usize).min(maxraystable.len() - 1)];
 		let reflection = record.material.reflect(&record, maxrays);
 		let invrays: f64 = 1.0 / reflection.len() as f64;
 		for (attenuation, ray) in reflection {
+		    // create the attenuation for the ray, remembering that it is going back in time
 		    let colour = attenuation.attenuate(colour).times_intensity(invrays);
 		    stack.push(Request{ray, colour, depth: depth + 1});
 		}
 	    } else {
+		// hit the sky, where higher is "cooler" (that is to say, bluer, at higher temp.)
 		let unit_direction = ray.direction.normalized();
 		let a = 0.5 * (unit_direction.y + 1.0);
 		let temperature = (1.0-a)*4000.0 + a*10000.0;
@@ -130,6 +140,7 @@ fn ray_colour(ray: Ray, colour: Colour, world: &Bvh, maxdepth: u32, maxraystable
     result
 }
 
+// the thing that generates the image; velocity is strictly less than 1 (c = 1)
 struct Camera {
     image_width: usize,
     image_height: usize,
@@ -142,6 +153,7 @@ struct Camera {
 }
 
 impl Camera {
+    // create a camera; some values are hardcoded here
     fn new(velocity: Vec3, position: Point3) -> Camera {
 	let aspect_ratio: f64 = 16.0 / 9.0;
 	let image_width = 640;
@@ -149,9 +161,7 @@ impl Camera {
 	let samples_per_pixel = Arc::new([64, 1]);
 	let max_depth = 8;
 	let vfov = 36.87_f64.to_radians() * 2.0;
-	//let velocity = Vec3::new(0.0, 0.0, 0.5);
 
-	//let position = Point3::new(-0.5, 1.0, 0.5);
 	let target = Point3::new(0.0, 0.0, -1.0);
 	let direction = position - target;
 	
@@ -167,28 +177,36 @@ impl Camera {
 	}
     }
 
+    // motion, time is in arbitrary units
     fn step(&mut self, timestep: f64) {
 	self.position += timestep * self.velocity;
     }
-    
+
+    // generate an image using multiple threads
     fn render(&self, world: &Bvh) -> Image {
 	let cpus = num_cpus::get();
 
+	// create several threads, each of which creates a number of complete pixels
+	// scope needed to allow the threads to copy references from the parent
 	let mut pixels = Vec::with_capacity(cpus);
 	thread::scope(|s| {
 	    let mut threads = Vec::with_capacity(cpus);
-	    
+
+	    // move the threadindex into thread scope
+	    // other objects have copy semantics, so they aren't moved
 	    for threadindex in 0..cpus {
 		threads.push(s.spawn(move || {
 		    self.render_thread(world, threadindex, cpus)
 		}));
 	    }
-	    
+
+	    // get the data and store on parent
 	    for thread in threads {
 		pixels.push(thread.join().unwrap());
 	    }
 	});
-	
+
+	// transpose the pixels so that adjacent pixels are from adjacent threads
 	let mut thread = 0;
 	let mut index = 0;
 	Image(Array2::from_shape_simple_fn((self.image_height, self.image_width), || {
@@ -202,7 +220,9 @@ impl Camera {
 	}))
     }
 
-    fn render_thread(&self, world: &Bvh, threadindex: usize, cpus: usize) -> Vec<Vec3> {
+    // runs in the threads, generating pixels with a fixed stride
+    fn render_thread(&self, world: &Bvh, threadindex: usize, cpus: usize) -> Vec<Colour3> {
+	// generate constants across the frame (which could be done in parent, but it would mean shuffling more data around)
 	let focal_length: f64 = self.direction.length();
 	let h = (self.vfov / 2.0).tan();
 	let viewport_height: f64 = 2.0 * h * focal_length;
@@ -224,26 +244,30 @@ impl Camera {
 	let pixels = self.image_width * self.image_height;
 	let mut rng = rand::thread_rng();
 
+	// store only our pixels, step but the number of threads being used
 	let mut result = Vec::with_capacity(pixels / cpus + 1);
+
+	// store, for each pixel, the set of samples
+	let mut total = Vec::with_capacity(self.samples_per_pixel[0] as usize);
 
 	for pixel in (0..pixels).skip(threadindex).step_by(cpus) {
 	    let j = pixel / self.image_width;
 	    let i = pixel % self.image_width;
 
-	    /*if i == 0 {
-		println!("Progress: {}%", j * 100 / self.image_height);
-	    }*/
-
-	    let mut total = Vec::with_capacity(self.samples_per_pixel[0] as usize);
+	    total.clear();
 	    for _ in 0..self.samples_per_pixel[0] {
+		// interpolate ray from camera parameters
 		let pixel_direction = (viewport_upper_left + (i as f64 + rng.gen::<f64>()) * inverse_width * viewport_u + (j as f64 + rng.gen::<f64>()) * inverse_height * viewport_v).normalized();
 		let mut ray = Ray::new(self.position, pixel_direction);
+		// uses three wavelengths only, since torgb can't do anything else currently
 		let mut colour = Colour::new([
 		    ColourSample::new(RED, 1.0),
 		    ColourSample::new(GREEN, 1.0),
 		    ColourSample::new(BLUE, 1.0),
 		]);
+		// transforms from self.velocity to "stationary", so velocity is reversed
 		lorentz(&mut ray.direction, &mut colour, -self.velocity);
+		// get the colour of the new ray
 		total.push(ray_colour(ray, colour, &world, self.max_depth, &self.samples_per_pixel[1..]));
 	    }
 	    result.push(torgb(&total))
@@ -254,23 +278,21 @@ impl Camera {
 }
 
 fn main() {
-    //println!("{}, {}, {}", Green.reflectance(RED), Green.reflectance(GREEN), Green.reflectance(BLUE));
-    
+    // create the scene, ideally would be loaded from a configuration file
+    // materials can be used multiple times
     let concrete = Arc::new(Lambertian::new(ReflectionSpectrum::Grey(Grey::new(0.5))));
 
     let mut elements = vec![
 	Primitive::from(Sphere::new(Arc::new(Lambertian::new(ReflectionSpectrum::Grey(Grey::new(0.2)))), Point3::new(0.0, 0.2, -4.0), 0.2)),
-//	Primitive::from(Sphere::new(Arc::new(Metal::new(ReflectionSpectrum::Grey(Grey::new(0.85)), 0.05)), Point3::new(1.0, 0.5, -1.0), 0.5)),
 	Primitive::from(Sphere::new(Arc::new(Metal::new(ReflectionSpectrum::Copper(Copper::new()), 0.1)), Point3::new(0.0, 1.9, -4.0), 0.5)),
 	Primitive::from(Sphere::new(Arc::new(Dielectric::new(1.5)), Point3::new(0.0, 0.9, -4.0), 0.5)),
 	Primitive::from(Sphere::new(Arc::new(Dielectric::new(1.0 / 1.5)), Point3::new(0.0, 0.9, -4.0), 0.35)),
 	Primitive::from(SmokeSphere::new(ReflectionSpectrum::Grey(Grey::new(0.0)), 0.4, Point3::new(0.0, 0.9, -4.0), 0.35)),
 
 	Primitive::from(PlaneSeg::new(Arc::new(Lambertian::new(ReflectionSpectrum::Grey(Grey::new(0.2)))), Point3::new(-10.0, 0.0, -10.0), Vec3::new(0.0, 0.0, 60.0), Vec3::new(20.0, 0.0, 0.0), PlaneSegType::Parallelogram)),
-	
-	//Primitive::from(PlaneSeg::new(Arc::new(Lambertian::new(ReflectionSpectrum::Grey(Grey::new(0.5)))), Point3::new(0.0, -1.0, 0.0), Vec3::new(0.0, 0.0, 10.0), Vec3::new(10.0, 0.0, 0.0), PlaneSegType::Ellipse)),
     ];
 
+    // create a composite structure that can be used multiple times
     let mut building1 = vec![
 	// a building
 	Primitive::from(PlaneSeg::new(concrete.clone(), Point3::new(-1.0, 0.0, -1.0), Vec3::new(-2.0, 0.0, 0.0), Vec3::new(0.0, 4.0, 0.0), PlaneSegType::Parallelogram)),
@@ -311,11 +333,10 @@ fn main() {
 	z -= 0.05;
     }
 
-
+    // render a still image, and then a video with a turn in the middle of it
     let world = Bvh::new(elements);
 
     let mut camera = Camera::new(Vec3::new(0.0, 0.0, 0.0), Point3::new(-0.5, 3.0, 3.0));
-    //let mut camera = Camera::new(Vec3::new(0.0, 0.0, -0.5), Point3::new(-0.5, 3.0, 3.0));
 
     println!("start");
     let mut image = camera.render(&world);

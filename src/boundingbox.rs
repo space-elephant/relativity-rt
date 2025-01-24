@@ -1,12 +1,15 @@
 use crate::{Ray, Point3, Vec3};
 use std::ops::*;
 
+// this file is based on vague recollections of pbrt
+// uses two Point3 objects to represent an axis alligned bounding box
 #[derive(Debug, Clone, Copy)]
 pub struct Boundingbox {
     min: Point3,
     max: Point3,
 }
 
+// default contains no volume, and intersects with anything to give that thing
 impl Default for Boundingbox {
     fn default() -> Self {
 	Boundingbox {
@@ -17,6 +20,7 @@ impl Default for Boundingbox {
 }
 
 impl Boundingbox {
+    // some utility functions
     pub fn new(min: Point3, max: Point3) -> Self {
 	Boundingbox {
 	    min,
@@ -40,6 +44,7 @@ impl Boundingbox {
 	self.max - self.min
     }
 
+    // intersect with a ray: find slab in each direction, and find their intersections
     pub fn intersect_ray(self, ray: Ray) -> Range<f64> {
 	let a = ray.direction.x;
 	let b = ray.origin.x;
@@ -63,6 +68,7 @@ impl Boundingbox {
     }
 }
 
+// + represents union
 impl Add for Boundingbox {
     type Output = Self;
 
@@ -88,6 +94,7 @@ impl AddAssign<Boundingbox> for Boundingbox {
     }
 }
 
+// * represents intersection
 impl Mul for Boundingbox {
     type Output = Self;
 
